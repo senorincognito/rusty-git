@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createCommit,
+  getHeadCommit,
   getStatus,
   stagePaths,
   unstagePaths,
   type ChangeKind,
   type FileChange,
+  type HeadCommit,
 } from "@/api/changes";
 import ResizablePanel from "@/components/ResizablePanel";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
@@ -66,6 +68,9 @@ export default function Changes({
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [amend, setAmend] = useState(false);
+  const [head, setHead] = useState<HeadCommit | null>(null);
+  const draft = useRef(""); // the message typed before switching amend on
 
   const start = useLatestRequest();
   const refresh = useCallback(async () => {
@@ -82,6 +87,8 @@ export default function Changes({
 
   useEffect(() => {
     setMessage("");
+    setAmend(false);
+    draft.current = "";
     refresh();
     // Pick up edits made outside the app when the window regains focus.
     window.addEventListener("focus", refresh);
@@ -92,6 +99,30 @@ export default function Changes({
   useEffect(() => {
     refresh();
   }, [refreshKey, refresh]);
+
+  // The last commit: used to pre-fill the amend message and to warn about rewriting pushed history.
+  const startHead = useLatestRequest();
+  useEffect(() => {
+    const isCurrent = startHead();
+    getHeadCommit(path)
+      .then((h) => isCurrent() && setHead(h))
+      .catch(() => isCurrent() && setHead(null));
+  }, [path, refreshKey, startHead]);
+
+  // The last commit disappeared (e.g. reset in a terminal): there is nothing left to amend.
+  useEffect(() => {
+    if (amend && !head) setAmend(false);
+  }, [amend, head]);
+
+  const toggleAmend = (on: boolean) => {
+    if (on) {
+      draft.current = message;
+      setMessage(head?.message ?? "");
+    } else {
+      setMessage(draft.current);
+    }
+    setAmend(on);
+  };
 
   const staged = useMemo(
     () => changes.filter((c) => c.staged).map((c) => ({ path: c.path, kind: c.staged! })),
@@ -117,12 +148,15 @@ export default function Changes({
 
   const commit = () =>
     run(async () => {
-      await createCommit(path, message);
+      await createCommit(path, message, amend);
       setMessage("");
+      setAmend(false);
+      draft.current = "";
       onCommitted();
     });
 
-  const canCommit = !busy && staged.length > 0 && message.trim().length > 0;
+  // An amend may change only the message, so it doesn't need staged files.
+  const canCommit = !busy && message.trim().length > 0 && (amend || staged.length > 0);
 
   return (
     <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
@@ -156,6 +190,31 @@ export default function Changes({
           }
         />
         <div className="commitbox">
+          <div className="commit-toolbar">
+            <label
+              className={"switch" + (!head || busy ? " disabled" : "")}
+              title={
+                head
+                  ? `Replace the last commit (${head.shortId}) instead of creating a new one`
+                  : "There is no commit to amend yet"
+              }
+            >
+              <input
+                type="checkbox"
+                role="switch"
+                checked={amend}
+                disabled={!head || busy}
+                onChange={(e) => toggleAmend(e.target.checked)}
+              />
+              <span className="switch-track" aria-hidden="true" />
+              <span>Amend previous commit</span>
+            </label>
+          </div>
+          {amend && head?.pushed && (
+            <p className="warn">
+              This commit is already pushed. Amending it rewrites history, so it will need a force push.
+            </p>
+          )}
           <textarea
             placeholder="Commit message"
             value={message}
@@ -167,7 +226,8 @@ export default function Changes({
           />
           {error && <p className="error">{error}</p>}
           <button className="primary" disabled={!canCommit} onClick={commit}>
-            Commit{staged.length > 0 ? ` (${staged.length})` : ""}
+            {amend ? "Amend commit" : "Commit"}
+            {staged.length > 0 ? ` (${staged.length})` : ""}
           </button>
         </div>
       </aside>

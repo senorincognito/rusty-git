@@ -20,6 +20,7 @@ pub fn run() {
             branches::create_branch,
             branches::delete_local_branch,
             branches::get_local_branches,
+            changes::get_head_commit,
             changes::get_status,
             changes::stage_paths,
             changes::unstage_paths,

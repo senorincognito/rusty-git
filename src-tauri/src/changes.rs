@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use git2::{ObjectType, Oid, Repository, RepositoryState, Status, StatusOptions};
+use git2::{BranchType, ObjectType, Oid, Repository, RepositoryState, Status, StatusOptions};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -148,6 +148,70 @@ fn commit_staged(repo: &mut Repository, message: &str) -> Result<Oid, String> {
     Ok(oid)
 }
 
+/// Replaces the last commit with the current index and `message`, like `git commit --amend`.
+/// The author (and author date) is kept; the committer becomes the current identity.
+fn amend_head(repo: &Repository, message: &str) -> Result<Oid, String> {
+    let message = git2::message_prettify(message, None).map_err(err)?;
+    if message.trim().is_empty() {
+        return Err("Commit message is empty".into());
+    }
+    if repo.state() == RepositoryState::Merge {
+        return Err("Finish the merge before amending".into());
+    }
+    let head = repo
+        .head()
+        .and_then(|h| h.peel_to_commit())
+        .map_err(|_| "There is no previous commit to amend".to_string())?;
+    let committer = repo
+        .signature()
+        .map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
+
+    let mut index = repo.index().map_err(err)?;
+    if index.has_conflicts() {
+        return Err("Resolve conflicts before committing".into());
+    }
+    let tree = repo.find_tree(index.write_tree().map_err(err)?).map_err(err)?;
+    if tree.id() == head.tree_id() && head.message().unwrap_or("").trim() == message.trim() {
+        return Err("Nothing to amend: no staged changes and the message is unchanged".into());
+    }
+
+    head.amend(Some("HEAD"), None, Some(&committer), None, Some(&message), Some(&tree))
+        .map_err(err)
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct HeadCommit {
+    pub short_id: String,
+    pub message: String,
+    /// The commit is already on the branch's upstream, so amending it needs a force push.
+    pub pushed: bool,
+}
+
+/// The last commit, or None on a branch without commits.
+fn head_commit(repo: &Repository) -> Option<HeadCommit> {
+    let head_ref = repo.head().ok()?;
+    let commit = head_ref.peel_to_commit().ok()?;
+
+    let mut pushed = false;
+    if head_ref.is_branch() {
+        let upstream_tip = head_ref
+            .shorthand()
+            .ok()
+            .and_then(|n| repo.find_branch(n, BranchType::Local).ok())
+            .and_then(|b| b.upstream().ok())
+            .and_then(|u| u.get().target());
+        if let Some(up) = upstream_tip {
+            pushed = up == commit.id() || repo.graph_descendant_of(up, commit.id()).unwrap_or(false);
+        }
+    }
+    Some(HeadCommit {
+        short_id: commit.id().to_string()[..7].to_string(),
+        message: commit.message().unwrap_or("").trim_end().to_string(),
+        pushed,
+    })
+}
+
 async fn blocking<T, F>(path: String, f: F) -> Result<T, String>
 where
     T: Send + 'static,
@@ -176,10 +240,19 @@ pub async fn unstage_paths(path: String, paths: Vec<String>) -> Result<(), Strin
     blocking(path, move |r| unstage(r, &paths)).await
 }
 
-/// Commits the index. Returns the new commit id.
+/// Commits the index, or with `amend` replaces the last commit. Returns the commit id.
 #[tauri::command]
-pub async fn create_commit(path: String, message: String) -> Result<String, String> {
-    blocking(path, move |r| commit_staged(r, &message).map(|o| o.to_string())).await
+pub async fn create_commit(path: String, message: String, amend: bool) -> Result<String, String> {
+    blocking(path, move |r| {
+        if amend { amend_head(r, &message) } else { commit_staged(r, &message) }.map(|o| o.to_string())
+    })
+    .await
+}
+
+/// Details of the last commit (to pre-fill the amend message and warn about history rewrites).
+#[tauri::command]
+pub async fn get_head_commit(path: String) -> Result<Option<HeadCommit>, String> {
+    blocking(path, |r| Ok(head_commit(r))).await
 }
 
 #[cfg(test)]
@@ -238,6 +311,69 @@ mod tests {
 
         // Nothing staged -> refuse.
         assert_eq!(commit_staged(&mut repo, "again").unwrap_err(), "Nothing staged to commit");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn amend_rewrites_last_commit() {
+        let dir = std::env::temp_dir().join(format!("gc-amend-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut repo = Repository::init(&dir).unwrap();
+        let set_user = |repo: &Repository, name: &str| {
+            let mut cfg = repo.config().unwrap();
+            cfg.set_str("user.name", name).unwrap();
+            cfg.set_str("user.email", "t@example.com").unwrap();
+        };
+        set_user(&repo, "Original");
+
+        // Nothing to amend yet.
+        assert!(head_commit(&repo).is_none());
+        assert!(amend_head(&repo, "x").unwrap_err().contains("no previous commit"));
+
+        fs::write(dir.join("a.txt"), "one").unwrap();
+        stage(&repo, &["a.txt".into()]).unwrap();
+        let first = commit_staged(&mut repo, "first").unwrap();
+        let info = head_commit(&repo).unwrap();
+        assert_eq!((info.message.as_str(), info.pushed), ("first", false));
+
+        // Nothing changed -> refuse; empty message -> refuse.
+        assert!(amend_head(&repo, "first").unwrap_err().contains("Nothing to amend"));
+        assert!(amend_head(&repo, "  ").is_err());
+
+        // Message-only amend by someone else: author stays, committer changes, history unchanged.
+        set_user(&repo, "Other");
+        let second = amend_head(&repo, "first, reworded").unwrap();
+        assert_ne!(first, second);
+        let c = repo.find_commit(second).unwrap();
+        assert_eq!(c.message(), Ok("first, reworded\n"));
+        assert_eq!(c.author().name(), Ok("Original"));
+        assert_eq!(c.committer().name(), Ok("Other"));
+        assert_eq!(c.parent_count(), 0);
+        assert_eq!(repo.head().unwrap().target(), Some(second));
+
+        // Staged changes are folded into the amended commit.
+        fs::write(dir.join("a.txt"), "two").unwrap();
+        fs::write(dir.join("b.txt"), "new").unwrap();
+        stage(&repo, &["a.txt".into(), "b.txt".into()]).unwrap();
+        let third = amend_head(&repo, "first, with more").unwrap();
+        let tree = repo.find_commit(third).unwrap().tree().unwrap();
+        assert_eq!(tree.len(), 2);
+        assert!(status_of(&repo).unwrap().is_empty());
+
+        // Once the commit is on the upstream, amending it is flagged as a history rewrite.
+        repo.remote("origin", "https://example.com/r.git").unwrap();
+        let branch = repo.head().unwrap().shorthand().unwrap().to_string();
+        repo.reference(&format!("refs/remotes/origin/{branch}"), third, true, "test").unwrap();
+        repo.find_branch(&branch, BranchType::Local)
+            .unwrap()
+            .set_upstream(Some(&format!("origin/{branch}")))
+            .unwrap();
+        assert!(head_commit(&repo).unwrap().pushed);
+        fs::write(dir.join("c.txt"), "x").unwrap();
+        stage(&repo, &["c.txt".into()]).unwrap();
+        amend_head(&repo, "first, with more").unwrap();
+        assert!(!head_commit(&repo).unwrap().pushed);
 
         let _ = fs::remove_dir_all(&dir);
     }

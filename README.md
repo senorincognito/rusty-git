@@ -31,6 +31,11 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 - Stage or unstage individual files, or all at once. Deleted files and repos without
   any commits yet are supported.
 - Commit message box. Commit with the button or `Ctrl`/`Cmd` + `Enter`.
+- **Amend previous commit** switch above the message box: pre-fills the last commit's
+  message and replaces that commit instead of creating a new one. Staged changes are folded
+  in, and a message-only amend works with nothing staged. The author is kept and the
+  committer becomes you, like `git commit --amend`. If the commit is already pushed, a
+  warning says amending it needs a force push.
 - Commit is refused when there is no message, nothing is staged, conflicts are
   unresolved, or `user.name` / `user.email` aren't configured. Errors are shown in the panel.
 - Finishing an in-progress merge records the merge parents and clears the merge state.
