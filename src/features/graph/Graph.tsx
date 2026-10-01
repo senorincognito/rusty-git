@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "@/api/graph";
+import type { ResetMode } from "@/api/history";
 import ContextMenu from "@/components/ContextMenu";
 import "./Graph.scss";
 
@@ -67,6 +68,7 @@ export default function Graph({
   onSelectWip,
   onRenameCommit,
   onDropCommit,
+  onResetCommit,
 }: {
   path: string;
   refreshKey?: number;
@@ -78,6 +80,8 @@ export default function Graph({
   onRenameCommit: (commit: { id: string; shortId: string }) => void;
   /** Drop a commit of the current branch (the commits after it are re-created). */
   onDropCommit: (commit: { id: string; shortId: string }) => void;
+  /** Reset the branch to a commit (soft, mixed or hard). */
+  onResetCommit: (commit: { id: string; shortId: string }, mode: ResetMode) => void;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [limit, setLimit] = useState(PAGE);
@@ -211,6 +215,27 @@ export default function Graph({
               disabled: dropReason !== undefined,
               title: dropReason ?? "Remove this commit and its changes from the branch (asks first)",
               onClick: () => onDropCommit({ id: menu.row.id, shortId: menu.row.shortId }),
+            },
+            // One group; the three reset modes open to its right.
+            {
+              label: "Reset to this commit",
+              separatorBefore: true,
+              disabled: menu.row.isStash,
+              title: menu.row.isStash
+                ? "A stash can't be a reset target"
+                : "Move the branch to this commit; choose what happens to the staging area and your files",
+              children: (
+                [
+                  ["soft", "Soft – keep changes staged", "Move the branch here; the staging area and your files are not touched (asks first)"],
+                  ["mixed", "Mixed – keep changes unstaged", "Move the branch here and reset the staging area; your files are not touched (asks first)"],
+                  ["hard", "Hard – discard changes", "Move the branch here and reset the staging area and your files; uncommitted changes are lost (asks first)"],
+                ] as const
+              ).map(([mode, label, title]) => ({
+                label,
+                title,
+                danger: mode === "hard",
+                onClick: () => onResetCommit({ id: menu.row.id, shortId: menu.row.shortId }, mode),
+              })),
             },
           ]}
         />

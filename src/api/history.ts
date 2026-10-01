@@ -38,3 +38,36 @@ export const getDropInfo = (path: string, id: string) => invoke<DropInfo>("get_d
  * and the rejection says which.
  */
 export const dropLatestCommit = (path: string, id: string) => invoke<void>("drop_latest_commit", { path, id });
+
+export type ResetMode = "soft" | "mixed" | "hard";
+
+/** What resetting to a commit would do to the branch, the staging area and the files. */
+export interface ResetInfo {
+  /** The checked-out branch; null on a detached HEAD. */
+  branch: string | null;
+  fromShort: string;
+  targetShort: string;
+  targetSummary: string;
+  /** The target is the commit HEAD is already on. */
+  sameCommit: boolean;
+  /** The target is HEAD or one of its ancestors (the branch moves back). */
+  isAncestor: boolean;
+  /** Commits that would no longer be on the branch, and the newest few of their summaries. */
+  removed: number;
+  removedSummaries: string[];
+  /** Commits the branch would gain. */
+  added: number;
+  /** How many removed commits are already on the upstream (a force push would be needed). */
+  pushedRemoved: number;
+  /** Files with uncommitted changes (a hard reset throws these away). */
+  workingChanges: number;
+}
+
+export const getResetInfo = (path: string, id: string) => invoke<ResetInfo>("get_reset_info", { path, id });
+
+/**
+ * git reset --soft / --mixed / --hard to a commit. Soft moves only the branch, mixed also resets
+ * the staging area, hard also resets the files (uncommitted changes are lost).
+ */
+export const resetToCommit = (path: string, id: string, mode: ResetMode) =>
+  invoke<void>("reset_to_commit", { path, id, mode });

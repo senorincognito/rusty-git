@@ -6,6 +6,7 @@ mod history;
 mod hunks;
 mod remotes;
 mod repo;
+mod reset;
 mod stash;
 mod sync;
 mod terminal;
@@ -44,6 +45,8 @@ pub fn run() {
             repo::open_repo,
             repo::get_recent_repos,
             repo::remove_recent_repo,
+            reset::get_reset_info,
+            reset::reset_to_commit,
             remotes::count_unmerged_remote_commits,
             remotes::delete_remote_branch,
             remotes::get_origin,

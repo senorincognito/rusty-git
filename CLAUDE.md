@@ -35,6 +35,7 @@ say plainly that UI behaviour is untested in the running app.
 
 | Module | Commands / role |
 | --- | --- |
+| `reset.rs` | `get_reset_info` (what a reset would remove/add, pushed count, uncommitted files), `reset_to_commit` (soft/mixed/hard) |
 | `repo.rs` | `open_repo`, recent repos (JSON in the app data dir) |
 | `graph.rs` | `get_graph`: revwalk over all refs, lane layout computed in Rust, `on_head` flag per row |
 | `changes.rs` | status, stage/unstage, `create_commit` (new or `amend`), `get_head_commit` |
@@ -89,7 +90,9 @@ app rename so users keep their data. Don't change it casually.
 - **Async UI requests** must ignore out-of-order responses: use `useLatestRequest`
   (`const isCurrent = start(); ...; if (isCurrent()) set(...)`).
 - **Popovers/menus** use `ContextMenu` (portal to `<body>`; supports `checked`, `separatorBefore`,
-  `danger`, `disabled`+`title`). Split buttons (Fetch/Pull/Push) use `withMenu` in `SyncBar`: arrow click or
+  `danger`, `disabled`+`title`, and groups via `children`: a submenu snapped to the right of the parent item (flips left
+  near the window edge), opened by hover with a 120 ms intent delay, click or ArrowRight; Escape/ArrowLeft close only
+  the submenu; outside-click detection is `closest(".ctxmenu")` so it covers every panel). Split buttons (Fetch/Pull/Push) use `withMenu` in `SyncBar`: arrow click or
   right-click opens it; the arrow's `onMouseDown` stops propagation so the outside-click handler doesn't
   fight the toggle. Dialogs use `Modal`; simple yes/no uses `confirmDialog` (native, Tauri dialog plugin).
 - **Destructive actions** confirm first, say what is lost, and prefer safe variants
@@ -130,6 +133,12 @@ app rename so users keep their data. Don't change it casually.
   pushed counts, merge flag) warns about rewritten ids, pushed history (force push), merge commits, other refs
   keeping the old history and lost signatures. Errors use the native `showError` dialog. **Revert commit** (the
   non-rewriting alternative for pushed commits) is not built.
+- **Reset** (graph context menu, `reset.rs`): a *Reset to this commit* group whose submenu offers Soft / Mixed / Hard on any non-stash commit,
+  each behind a confirmation whose text is built by `features/repo/describeReset.ts` from `get_reset_info` (commits
+  removed with the newest few listed, commits gained, pushed count, uncommitted file count, ancestor or jump to another
+  line). It is plain `git2` `reset` (Soft/Mixed/Hard), also allowed on a detached HEAD, refused during a merge/rebase
+  and on an empty repo. Hard leaves untracked files alone; only uncommitted changes are unrecoverable (removed commits
+  stay in the reflog).
 - **Branch rename** (inline editor in the sidebar) is not allowed for the checked-out branch (local) or the
   branch the checked-out branch tracks (remote). Remote rename = one atomic push of the new name plus
   deletion of the old one, guarded by a lease; local branches that tracked it are repointed.

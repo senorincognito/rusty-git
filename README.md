@@ -108,6 +108,20 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   history (a force push is then needed) and notes that other branches and tags keep the old history. The old
   commits stay recoverable through `git reflog` for a while.
 
+### Resetting to a commit
+- Right-click any commit, point at **Reset to this commit** (a menu group: its submenu opens to the right on
+  hover, click or the right arrow key) and choose **Soft**, **Mixed** or **Hard** (the commits of other lines of
+  history work too; stashes don't). Each asks first, spelling out what happens:
+  - **soft** moves only the branch; the staging area and your files are untouched, so the removed commits' changes
+    show up as staged changes;
+  - **mixed** also resets the staging area; your files are untouched, so those changes (and anything that was
+    staged) become unstaged, new files untracked;
+  - **hard** also resets your files: uncommitted changes are lost for good and the removed commits' changes leave
+    your files (untracked files are left alone).
+- The confirmation lists the commits that leave the branch (or how far it moves forward), says how many uncommitted
+  file changes a hard reset would throw away, warns when removed commits are already pushed (a force push is then
+  needed), and mentions the reflog. It works on a detached HEAD too.
+
 ### Branches and remotes (left panel)
 - **Local branches**: alphabetical list with the current branch highlighted and `↑n` / `↓n`
   when ahead of or behind the upstream. Double-click a branch to check it out (safe

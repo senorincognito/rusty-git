@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
 import type { CommitFile } from "@/api/commit";
 import { confirmDialog, showError } from "@/api/dialog";
-import { dropLatestCommit, getDropInfo } from "@/api/history";
+import { dropLatestCommit, getDropInfo, getResetInfo, resetToCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import ResizablePanel from "@/components/ResizablePanel";
@@ -16,6 +16,7 @@ import Sidebar from "@/features/sidebar/Sidebar";
 import TerminalPanel from "@/features/terminal/TerminalPanel";
 import BranchButton from "@/features/toolbar/BranchButton";
 import SyncBar from "@/features/toolbar/SyncBar";
+import { describeReset } from "./describeReset";
 import "./RepoView.scss";
 
 /** The screen for an open repository: title bar, sidebar, graph, changes and terminal. */
@@ -74,6 +75,20 @@ export default function RepoView({
       reload();
     } catch (e) {
       await showError(String(e), "Drop commit");
+    }
+  };
+
+  // Right-click > Reset to this commit (soft / mixed / hard): show the consequences, then reset.
+  const resetCommit = async (commit: { id: string; shortId: string }, mode: ResetMode) => {
+    try {
+      const info = await getResetInfo(path, commit.id);
+      if (!(await confirmDialog(describeReset(info, mode), `Reset (${mode})`, true, `Reset ${mode}`))) return;
+      await resetToCommit(path, commit.id, mode);
+      closeCommit(); // the selected commit may no longer be on the branch
+      setOpenWorkingFile(null); // the files may have changed under an open working-tree diff
+      reload();
+    } catch (e) {
+      await showError(String(e), `Reset (${mode})`);
     }
   };
 
@@ -157,6 +172,7 @@ export default function RepoView({
               }}
               onRenameCommit={setRenaming}
               onDropCommit={dropCommit}
+              onResetCommit={resetCommit}
             />
           </div>
           {openFile && selectedCommit && (

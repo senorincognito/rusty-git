@@ -8,6 +8,11 @@
   display: flex;
   flex-direction: column;
   @include floating($shadow-menu);
+
+  // A submenu, snapped to the side of its parent.
+  &.sub {
+    z-index: 101;
+  }
 }
 
 .ctxitem {
@@ -32,6 +37,28 @@
     opacity: 0.4;
     cursor: default;
   }
+
+  // A group whose submenu is open stays highlighted.
+  &.open {
+    background: $press-tint;
+  }
+}
+
+// Each item sits in a row that listens for the pointer (a disabled button would not report it).
+.ctxrow {
+  display: flex;
+
+  > .ctxitem {
+    flex: 1;
+  }
+}
+
+// The arrow that marks a group.
+.ctxarrow {
+  margin-left: auto;
+  padding-left: 16px;
+  color: $muted;
+  font-size: 10px;
 }
 
 // Check-mark gutter for toggle and radio items.
