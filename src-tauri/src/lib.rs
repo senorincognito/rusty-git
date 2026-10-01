@@ -34,6 +34,8 @@ pub fn run() {
             changes::unstage_paths,
             changes::create_commit,
             graph::get_graph,
+            history::drop_latest_commit,
+            history::get_drop_info,
             history::get_rename_info,
             hunks::discard_hunk_cmd,
             hunks::stage_hunk_cmd,

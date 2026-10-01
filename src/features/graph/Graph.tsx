@@ -66,6 +66,7 @@ export default function Graph({
   onSelectCommit,
   onSelectWip,
   onRenameCommit,
+  onDropCommit,
 }: {
   path: string;
   refreshKey?: number;
@@ -75,6 +76,8 @@ export default function Graph({
   /** The uncommitted-changes row was clicked. */
   onSelectWip: () => void;
   onRenameCommit: (commit: { id: string; shortId: string }) => void;
+  /** Drop a commit of the current branch (the commits after it are re-created). */
+  onDropCommit: (commit: { id: string; shortId: string }) => void;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [limit, setLimit] = useState(PAGE);
@@ -134,6 +137,18 @@ export default function Graph({
     }
   }, [graph, last, rows.length]);
 
+  // Commits on the checked-out branch can be dropped (the backend also checks the details: the commit
+  // must be on the branch's own line, with no merge after it, and not a detached HEAD).
+  const dropReason = !menu
+    ? undefined
+    : menu.row.isStash
+      ? "A stash can't be dropped here"
+      : !menu.row.onHead
+        ? "Only commits on the current branch can be dropped"
+        : menu.row.parents.length === 0
+          ? "The first commit of a branch can't be dropped"
+          : undefined;
+
   const laneWidth = Math.min(Math.max(graph?.maxLanes ?? 1, 1), 24) * LANE_W + 4;
 
   if (error) return <p className="error pad">{error}</p>;
@@ -189,6 +204,13 @@ export default function Graph({
                   ? "A stash can't be renamed"
                   : "Only commits on the current branch can be renamed",
               onClick: () => onRenameCommit({ id: menu.row.id, shortId: menu.row.shortId }),
+            },
+            {
+              label: "Drop commit",
+              danger: true,
+              disabled: dropReason !== undefined,
+              title: dropReason ?? "Remove this commit and its changes from the branch (asks first)",
+              onClick: () => onDropCommit({ id: menu.row.id, shortId: menu.row.shortId }),
             },
           ]}
         />

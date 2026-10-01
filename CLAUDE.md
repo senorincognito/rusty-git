@@ -121,6 +121,15 @@ app rename so users keep their data. Don't change it casually.
 - **Rename commit** (graph context menu) only for commits on the current branch. Rebuilds the commit and
   every later commit with identical trees/authors/dates, then moves the branch; other branches keep the old
   history. Warns about rewritten descendants and pushed commits.
+- **Drop commit** (graph context menu, `history.rs` `drop_plan`/`drop_commit`) works for any commit on the checked-out
+  branch's own first-parent line when no merge commit lies between it and the tip, and the commit has a parent.
+  The commits after it are re-created in memory with `cherrypick_commit` (3-way merge, original author, committer
+  and message; empty results are kept, not silently dropped); a conflict aborts with the commit and files named
+  and nothing changed. Only then does a hard reset move the branch, index and working directory, so the working
+  directory must be clean. The confirmation (RepoView `dropCommit`, data from `get_drop_info`: later commits,
+  pushed counts, merge flag) warns about rewritten ids, pushed history (force push), merge commits, other refs
+  keeping the old history and lost signatures. Errors use the native `showError` dialog. **Revert commit** (the
+  non-rewriting alternative for pushed commits) is not built.
 - **Branch rename** (inline editor in the sidebar) is not allowed for the checked-out branch (local) or the
   branch the checked-out branch tracks (remote). Remote rename = one atomic push of the new name plus
   deletion of the old one, guarded by a lease; local branches that tracked it are repointed.

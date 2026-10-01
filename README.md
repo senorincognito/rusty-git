@@ -96,6 +96,18 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   panel warns when later commits are rewritten and when the commit is already pushed (a
   force push is then needed).
 
+### Dropping a commit
+- Right-click a commit on the current branch and choose **Drop commit** (greyed out, with a tooltip, on other
+  branches' commits, stashes and the first commit). After a confirmation the commit disappears from the branch
+  together with its changes in the working directory. Commits after it are re-created on top of its parent
+  (new ids, same changes, authors and messages), like a drop in an interactive rebase.
+- It is all-or-nothing: the replay happens in memory, and if a later commit depends on the dropped one and would
+  conflict, nothing is changed and the message names the commit and files. It needs a clean working directory,
+  a commit on the branch's own line with no merge commit after it, and a checked-out branch (not a detached
+  HEAD). The confirmation spells out how many commits are rewritten, warns about merges and already-pushed
+  history (a force push is then needed) and notes that other branches and tags keep the old history. The old
+  commits stay recoverable through `git reflog` for a while.
+
 ### Branches and remotes (left panel)
 - **Local branches**: alphabetical list with the current branch highlighted and `↑n` / `↓n`
   when ahead of or behind the upstream. Double-click a branch to check it out (safe

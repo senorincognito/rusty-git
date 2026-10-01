@@ -1,4 +1,4 @@
-import { ask, open } from "@tauri-apps/plugin-dialog";
+import { ask, message, open } from "@tauri-apps/plugin-dialog";
 
 /** Shows the native folder picker; resolves to null if cancelled. */
 export async function pickFolder(): Promise<string | null> {
@@ -14,3 +14,6 @@ export const confirmDialog = (message: string, title: string, danger = false, ok
     okLabel,
     cancelLabel: "Cancel",
   });
+
+/** Native error message box. */
+export const showError = (text: string, title: string) => message(text, { title, kind: "error" });

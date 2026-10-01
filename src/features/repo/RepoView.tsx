@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
 import type { CommitFile } from "@/api/commit";
+import { confirmDialog, showError } from "@/api/dialog";
+import { dropLatestCommit, getDropInfo } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import ResizablePanel from "@/components/ResizablePanel";
@@ -42,6 +44,39 @@ export default function RepoView({
     setOpenFile(null);
     setOpenWorkingFile(null);
   };
+  // Right-click > Drop commit: confirm what will be lost and rewritten, then drop it.
+  const dropCommit = async (commit: { id: string; shortId: string }) => {
+    try {
+      const info = await getDropInfo(path, commit.id);
+      const lines = [
+        `Drop commit ${info.shortId} "${info.summary}"?`,
+        "",
+        "The commit is removed from the current branch, and its changes are removed from your working directory.",
+      ];
+      if (info.laterCommits > 0) {
+        const n = info.laterCommits;
+        lines.push(
+          "",
+          `The ${n} later commit${n === 1 ? "" : "s"} on this branch will be re-created on top of its parent (new ids, same ` +
+            "changes, authors and messages; signatures are not kept). If one of them depends on the dropped commit, the " +
+            "drop is cancelled and nothing is changed.",
+        );
+      }
+      if (info.isMerge) lines.push("", "This is a merge commit: the branch goes back to its first parent.");
+      if (info.pushed || info.laterPushed > 0) {
+        lines.push("", "Part of this history is already pushed. Dropping it rewrites that history, so it will need a force push.");
+      }
+      lines.push("", "Other branches, tags and stashes that point at the old commits keep the old history.");
+      lines.push("", "Git keeps the old commits in its reflog for a while, so they can still be recovered with git reflog.");
+      if (!(await confirmDialog(lines.join("\n"), "Drop commit", true, "Drop commit"))) return;
+      await dropLatestCommit(path, commit.id);
+      closeCommit(); // the dropped commit may be the one shown in the right panel
+      reload();
+    } catch (e) {
+      await showError(String(e), "Drop commit");
+    }
+  };
+
   const closeCommit = () => {
     setSelectedCommit(null);
     setOpenFile(null);
@@ -121,6 +156,7 @@ export default function RepoView({
                 setRenaming(null);
               }}
               onRenameCommit={setRenaming}
+              onDropCommit={dropCommit}
             />
           </div>
           {openFile && selectedCommit && (
