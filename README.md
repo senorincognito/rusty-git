@@ -263,6 +263,22 @@ On macOS the results are an `.app` and a `.dmg` under `bundle/`, and a Mac is re
   all three together before building a new release.
 - The build scripts are tested on Windows. The shell script has not been run on macOS or Linux yet.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs lint and tests on every push to `main` or a `release/*` branch, every pull request and on demand:
+
+1. **Frontend**: `npm run lint` (ESLint), `npm run build` (typecheck + bundle + SCSS).
+2. **Rust**: `cargo fmt --check`, `cargo clippy -D warnings`, and the backend tests on Linux, Windows and macOS.
+3. **Build**, only on a branch named `release/<version>` and only when all of that passes: a Windows installer (NSIS `.exe` and `.msi`) and a universal macOS `.dmg`
+   (Apple Silicon and Intel), kept as workflow artifacts.
+4. **Release**: that same branch also creates a *draft* GitHub release tagged `v<version>` with the installers attached;
+   review it, then publish. To release 0.2.0: bump the version (`package.json`, `Cargo.toml`, `tauri.conf.json`), then push a
+   branch `release/0.2.0`. The version in the branch name must equal the one in `package.json`, otherwise the build stops.
+
+The installers are unsigned (see above): Windows shows SmartScreen's "unknown publisher" and macOS needs right-click,
+Open the first time. Run the same checks locally with `npm run lint`, `npm run build`,
+`cargo fmt --manifest-path src-tauri/Cargo.toml` and `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets`.
+
 ## Layout
 
 Backend (`src-tauri/src/`), one module per concern, each with tests where it has logic:

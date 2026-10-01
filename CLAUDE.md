@@ -19,8 +19,8 @@ npx tsc --noEmit                                     # typecheck the frontend
 npx vite build                                       # bundle (also proves the "@/" alias resolves)
 cargo test --lib --manifest-path src-tauri/Cargo.toml   # all backend tests (needs system `git` on PATH)
 cargo check --manifest-path src-tauri/Cargo.toml     # keep it warning-free
-cargo fmt --manifest-path src-tauri/Cargo.toml       # rustfmt (src-tauri/rustfmt.toml: width 120)
-cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings   # keep it clean
+cargo fmt --manifest-path src-tauri/Cargo.toml       # rustfmt (src-tauri/rustfmt.toml: width 120); CI runs --check
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings   # CI fails on any warning
 ```
 
 Before calling work done: `cargo test --lib`, `cargo fmt --check`, `cargo clippy`, `npm run lint`, `npx tsc --noEmit` and `npx vite build` (which also compiles all the
@@ -294,13 +294,21 @@ separate CSS step.
 
 ## Building and distribution
 
-**Decision: self-built only, for now.** No code-signing certificate, no CI release workflow, no auto-updater.
-The author builds locally and installs the result themselves. Don't add signing, an updater or a release
-pipeline unless asked; if distribution to others comes up, the options already discussed are:
+**Decision: unsigned builds, no auto-updater.** The author builds locally with the scripts below, or takes the installers
+from the CI workflow (next paragraph). Don't add signing or an updater unless asked; if distribution to others comes up, the options already discussed are:
 `tauri-action` on GitHub Actions (builds Windows + macOS and attaches them to a Release), `tauri-plugin-updater`
 (needs its own signing key pair, kept as a CI secret and never committed, plus a `latest.json` on the
 Release), and a Windows code-signing certificate to avoid the SmartScreen "unknown publisher" warning.
 
+- **CI** (`.github/workflows/ci.yml`): jobs `frontend` (ESLint, `npm run build`), `rust-lint` (rustfmt, clippy `-D warnings`),
+  `rust-test` (Linux, Windows, macOS, `fail-fast: false`) and, after all three, `build` (Windows NSIS+MSI; macOS universal
+  DMG via `--target universal-apple-darwin`) uploading artifacts. Lint and tests run on every push and PR; `build` and
+  `release` run **only on a `release/<version>` branch** (the name must equal the `package.json` version, checked in `build`),
+  and `release` creates a **draft** release `v<version>` with `gh release create` targeting that commit. No third-party release action, no
+  secrets beyond `GITHUB_TOKEN`. Builds are unsigned (macOS needs right-click > Open). Nothing here has run on GitHub yet when this
+  was written: if a job fails, fix the workflow from the log (Linux needs the webkit2gtk/xdo/appindicator packages just to compile).
+  ESLint (`eslint.config.js`) enables only `rules-of-hooks` and `exhaustive-deps` from the react-hooks plugin: its React Compiler
+  rules flag deliberate patterns (state reset in effects on `path` change, ref sync during render).
 - Build with the scripts in `scripts/`: `build-release.cmd` (Windows launcher, double-clickable; runs the
   `.ps1` with `-ExecutionPolicy Bypass` because the default policy blocks unsigned .ps1 files) and
   `build-release.sh` (macOS/Linux/Git Bash; tested here only under Git Bash on Windows). Both check the
