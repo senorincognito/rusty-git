@@ -137,6 +137,7 @@ export default function RepoView({
               source={{ kind: openWorkingFile.staged ? "staged" : "unstaged" }}
               file={{ path: openWorkingFile.path, status: openWorkingFile.status }}
               refreshKey={graphKey}
+              onChanged={reload} // a staged or discarded hunk changes the staging lists and the graph
               onClose={() => setOpenWorkingFile(null)}
             />
           )}

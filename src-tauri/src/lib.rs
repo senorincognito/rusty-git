@@ -3,6 +3,7 @@ mod changes;
 mod commit_detail;
 mod graph;
 mod history;
+mod hunks;
 mod remotes;
 mod repo;
 mod stash;
@@ -34,6 +35,8 @@ pub fn run() {
             changes::create_commit,
             graph::get_graph,
             history::get_rename_info,
+            hunks::discard_hunk_cmd,
+            hunks::stage_hunk_cmd,
             history::rename_commit_message,
             repo::open_repo,
             repo::get_recent_repos,

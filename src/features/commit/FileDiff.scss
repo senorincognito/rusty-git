@@ -132,4 +132,69 @@
     color: $muted;
     font-style: italic;
   }
+
+  // Heading row above a hunk. Its content sticks to the left edge while the code scrolls sideways.
+  &.block {
+    align-items: center;
+    background: $press-tint;
+
+    .bk {
+      position: sticky;
+      left: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 12px;
+    }
+
+    .bk-title {
+      font-size: 11px;
+      color: $muted;
+
+      .add {
+        color: $added;
+      }
+
+      .del {
+        color: $danger;
+      }
+    }
+  }
+}
+
+// "Stage hunk" / "Discard hunk" in a hunk heading.
+.bk-btn {
+  height: 16px;
+  padding: 0 8px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 14px;
+  background: $bg;
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+
+  &:hover:not(:disabled) {
+    border-color: $accent;
+  }
+
+  &.danger:hover:not(:disabled) {
+    border-color: $danger;
+    color: $danger;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+// Why a hunk could not be staged or discarded.
+.fd-error {
+  flex: none;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: $danger;
+  background: $removed-tint;
+  border-bottom: 1px solid $border;
 }

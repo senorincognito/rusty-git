@@ -6,6 +6,8 @@ export interface DiffLine {
   oldNo: number | null;
   newNo: number | null;
   text: string;
+  /** The hunk (run of added/removed lines) this line belongs to; null for context and headers. */
+  block: number | null;
 }
 
 export interface FileDiff {
@@ -15,6 +17,8 @@ export interface FileDiff {
   truncated: boolean;
   additions: number;
   deletions: number;
+  /** One fingerprint per hunk, used to detect that the file changed before stage/discard. */
+  blocks: string[];
 }
 
 /**
@@ -35,3 +39,14 @@ export const getFileDiff = (
  */
 export const getWorkingDiff = (path: string, file: string, staged: boolean, fullFile: boolean) =>
   invoke<FileDiff>("get_working_diff", { path, file, staged, fullFile });
+
+/**
+ * Puts one hunk of a file's unstaged changes into the staging area. `blockId` is the hunk's
+ * fingerprint from the diff; if the file changed since the diff was shown the call is refused.
+ */
+export const stageHunk = (path: string, file: string, block: number, blockId: string) =>
+  invoke<void>("stage_hunk_cmd", { path, file, block, blockId });
+
+/** Throws away one hunk of a file's unstaged changes. Cannot be undone. */
+export const discardHunk = (path: string, file: string, block: number, blockId: string) =>
+  invoke<void>("discard_hunk_cmd", { path, file, block, blockId });

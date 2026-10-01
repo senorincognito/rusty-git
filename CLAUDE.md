@@ -38,6 +38,7 @@ say plainly that UI behaviour is untested in the running app.
 | `repo.rs` | `open_repo`, recent repos (JSON in the app data dir) |
 | `graph.rs` | `get_graph`: revwalk over all refs, lane layout computed in Rust, `on_head` flag per row |
 | `changes.rs` | status, stage/unstage, `create_commit` (new or `amend`), `get_head_commit` |
+| `hunks.rs` | `stage_hunk`, `discard_hunk`: apply one hunk of a file's unstaged changes (see Product decisions) |
 | `commit_detail.rs` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
 | `history.rs` | `get_rename_info`, `rename_commit_message` (rewrites the commit and its descendants); `is_pushed` |
 | `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
@@ -141,6 +142,15 @@ app rename so users keep their data. Don't change it casually.
   `useWorkingChangeCount`, enforced in Rust) so a
   conflicting pop can be undone exactly (`restore_clean`) with the stash kept. Apply-without-drop and drop
   are not built yet.
+- **Hunks**: a hunk is a maximal run of added/removed lines (`DiffLine::block`, numbered in file order and identical in
+  full-file and context-only views); `FileDiff::blocks` holds one FNV fingerprint per hunk. Every diff view shows a
+  heading row per hunk; only the *unstaged* view of a tracked, non-conflicted, non-binary file gets **Stage hunk** /
+  **Discard hunk** (`stage_hunk_cmd` / `discard_hunk_cmd`, which re-diff and refuse with a "changed since this diff
+  was shown" error when the fingerprint no longer matches). They do not build patches: `hunks.rs` rebuilds the
+  index blob (stage) or the file on disk (discard) line by line from the full-file diff using each line's raw bytes,
+  so CRLF files and a missing final newline survive (discard re-inserts restored lines with the file's own EOL).
+  Staging a deletion removes the index entry; discarding one checks the file out of the index. Unstage-hunk for the
+  staged view is not built yet.
 - Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;
   binary/over-5 MB files are not previewed. The diff view has a "Full file" switch (default on).
 
@@ -284,7 +294,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 
 ## Not implemented yet
 
-Tags in the sidebar; applying a stash without removing it and dropping stashes; hunk/line staging from the diff view; checkout of remote branches; merge/rebase as standalone actions; discard
+Tags in the sidebar; applying a stash without removing it and dropping stashes; unstaging a single hunk from the staged diff and line-level staging; checkout of remote branches; merge/rebase as standalone actions; discard
 changes and stash; conflict resolution UI (pulls with conflicts are aborted); multiple remotes (only
 `origin`); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview

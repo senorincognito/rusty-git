@@ -141,6 +141,9 @@ pub struct DiffLine {
     pub old_no: Option<u32>,
     pub new_no: Option<u32>,
     pub text: String,
+    /// Index of the hunk (a contiguous run of added/removed lines) this line belongs to; None for
+    /// context lines and headers. Numbered in file order, the same in every view of the file.
+    pub block: Option<usize>,
 }
 
 #[derive(Serialize, Debug)]
@@ -153,6 +156,9 @@ pub struct FileDiff {
     pub truncated: bool,
     pub additions: usize,
     pub deletions: usize,
+    /// One fingerprint per hunk (see DiffLine::block), so a stage/discard request can tell the file
+    /// has changed since the diff was shown.
+    pub blocks: Vec<String>,
 }
 
 /// Options shared by every file diff: literal paths (names with [, * or ? are not patterns),
@@ -172,7 +178,22 @@ fn diff_options(path: &str, old_path: Option<&str>, full_file: bool) -> DiffOpti
 
 /// Turns a git diff into the line list the file view draws.
 fn render_diff(diff: &git2::Diff, full_file: bool) -> Result<FileDiff, String> {
-    let mut out = FileDiff { lines: Vec::new(), binary: false, truncated: false, additions: 0, deletions: 0 };
+    render_diff_raw(diff, full_file).map(|(d, _)| d)
+}
+
+/// FNV-1a: a small, stable hash for the hunk fingerprints.
+fn fnv(hash: &mut u64, bytes: &[u8]) {
+    for b in bytes {
+        *hash ^= u64::from(*b);
+        *hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+}
+
+/// Like [`render_diff`], but also returns each line's exact bytes (parallel to `lines`; empty for
+/// headers and notes), which stage/discard need to rebuild file contents without touching line endings.
+pub(crate) fn render_diff_raw(diff: &git2::Diff, full_file: bool) -> Result<(FileDiff, Vec<Vec<u8>>), String> {
+    let mut out = FileDiff { lines: Vec::new(), binary: false, truncated: false, additions: 0, deletions: 0, blocks: Vec::new() };
+    let mut raw: Vec<Vec<u8>> = Vec::new();
     diff.print(DiffFormat::Patch, |delta, _hunk, line| {
         if delta.flags().is_binary() || line.origin() == 'B' {
             out.binary = true;
@@ -200,21 +221,57 @@ fn render_diff(diff: &git2::Diff, full_file: bool) -> Result<FileDiff, String> {
             "note" => "No newline at end of file".to_string(),
             _ => String::from_utf8_lossy(line.content()).trim_end_matches(['\n', '\r']).to_string(),
         };
-        out.lines.push(DiffLine { kind, old_no: line.old_lineno(), new_no: line.new_lineno(), text });
+        out.lines.push(DiffLine { kind, old_no: line.old_lineno(), new_no: line.new_lineno(), text, block: None });
+        raw.push(if matches!(kind, "ctx" | "add" | "del") { line.content().to_vec() } else { Vec::new() });
         true
     })
     .map_err(err)?;
 
     if out.binary {
         out.lines.clear();
+        raw.clear();
     }
-    Ok(out)
+
+    // Group the changed lines into hunks: maximal runs of added/removed lines. Context lines and
+    // hunk headers end a run; "no newline" notes don't (they sit inside the run they belong to).
+    let mut hashes: Vec<u64> = Vec::new();
+    let mut current: Option<usize> = None;
+    for line in out.lines.iter_mut() {
+        match line.kind {
+            "add" | "del" => {
+                let idx = *current.get_or_insert_with(|| {
+                    hashes.push(0xcbf2_9ce4_8422_2325);
+                    hashes.len() - 1
+                });
+                line.block = Some(idx);
+                let h = &mut hashes[idx];
+                fnv(h, line.kind.as_bytes());
+                fnv(h, &line.old_no.unwrap_or(0).to_le_bytes());
+                fnv(h, &line.new_no.unwrap_or(0).to_le_bytes());
+                fnv(h, line.text.as_bytes());
+                fnv(h, &[0xff]);
+            }
+            "note" => {}
+            _ => current = None,
+        }
+    }
+    out.blocks = hashes.iter().map(|h| format!("{h:016x}")).collect();
+    Ok((out, raw))
 }
 
 /// A file's uncommitted changes. `staged` compares HEAD with the index (what the next commit
 /// would contain); otherwise the index with the file on disk (what staging would add), where an
 /// untracked file shows up as all additions.
 fn working_diff(repo: &Repository, path: &str, staged: bool, full_file: bool) -> Result<FileDiff, String> {
+    working_diff_raw(repo, path, staged, full_file).map(|(d, _)| d)
+}
+
+pub(crate) fn working_diff_raw(
+    repo: &Repository,
+    path: &str,
+    staged: bool,
+    full_file: bool,
+) -> Result<(FileDiff, Vec<Vec<u8>>), String> {
     let mut opts = diff_options(path, None, full_file);
     let index = repo.index().map_err(err)?;
     let diff = if staged {
@@ -226,7 +283,7 @@ fn working_diff(repo: &Repository, path: &str, staged: bool, full_file: bool) ->
         repo.diff_index_to_workdir(Some(&index), Some(&mut opts))
     }
     .map_err(err)?;
-    render_diff(&diff, full_file)
+    render_diff_raw(&diff, full_file)
 }
 
 /// What one file of a commit changed, against the first parent. With `full_file` the whole file

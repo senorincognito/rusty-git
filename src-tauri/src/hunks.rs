@@ -1,0 +1,367 @@
+//! Staging and discarding a single hunk of a file's uncommitted changes.
+//!
+//! A hunk is a contiguous run of added/removed lines (see `DiffLine::block`). Instead of building
+//! and applying patches, the new contents are rebuilt line by line from the full-file diff:
+//! lines keep their exact bytes, so line endings (including CRLF files and a missing final
+//! newline) survive. Every request carries the hunk's fingerprint, so a stale diff can never be
+//! applied to a different change.
+
+use std::path::{Path, PathBuf};
+
+use git2::build::CheckoutBuilder;
+use git2::{IndexEntry, IndexTime, Oid, Repository};
+
+use crate::commit_detail::{working_diff_raw, FileDiff};
+
+fn err(e: git2::Error) -> String {
+    e.message().to_string()
+}
+
+const STALE: &str = "The file changed since this diff was shown. The diff has been refreshed; try again.";
+
+fn workdir(repo: &Repository) -> Result<PathBuf, String> {
+    repo.workdir().map(Path::to_path_buf).ok_or_else(|| "The repository has no working directory".to_string())
+}
+
+/// The unstaged diff of `path` with its exact line bytes, after checking that hunk `block` is
+/// still the one the caller saw (`id`) and that the file can be changed hunk by hunk.
+fn locate(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(FileDiff, Vec<Vec<u8>>), String> {
+    let (diff, raw) = working_diff_raw(repo, path, false, true)?;
+    if diff.binary {
+        return Err("Binary files can't be changed hunk by hunk".into());
+    }
+    if diff.truncated {
+        return Err("This diff is too large to change hunk by hunk".into());
+    }
+    if diff.blocks.get(block).map(String::as_str) != Some(id) {
+        return Err(STALE.into());
+    }
+    if repo.index().map_err(err)?.get_path(Path::new(path), 0).is_none() {
+        return Err("This file is not tracked yet, so it can't be changed hunk by hunk. Stage the whole file instead.".into());
+    }
+    Ok((diff, raw))
+}
+
+/// Puts hunk `block` of the file's unstaged changes into the index (the staging area), leaving
+/// the file on disk and the other hunks untouched.
+pub(crate) fn stage_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
+    let (diff, raw) = locate(repo, path, block, id)?;
+    let rel = Path::new(path);
+    let mut index = repo.index().map_err(err)?;
+    let existing = index.get_path(rel, 0).ok_or(STALE)?;
+
+    // The index version, plus only the changes of this hunk.
+    let mut out: Vec<u8> = Vec::new();
+    for (line, bytes) in diff.lines.iter().zip(&raw) {
+        let mine = line.block == Some(block);
+        match line.kind {
+            "ctx" => out.extend_from_slice(bytes),
+            "del" if !mine => out.extend_from_slice(bytes),
+            "add" if mine => out.extend_from_slice(bytes),
+            _ => {}
+        }
+    }
+
+    if out.is_empty() && !workdir(repo)?.join(rel).exists() {
+        // The file was deleted on disk and this hunk is the deletion: stage the removal.
+        index.remove_path(rel).map_err(err)?;
+    } else {
+        let entry = IndexEntry {
+            ctime: IndexTime::new(0, 0),
+            mtime: IndexTime::new(0, 0),
+            dev: 0,
+            ino: 0,
+            mode: existing.mode,
+            uid: 0,
+            gid: 0,
+            file_size: out.len() as u32,
+            id: Oid::ZERO_SHA1,
+            flags: 0,
+            flags_extended: 0,
+            path: existing.path.clone(),
+        };
+        index.add_frombuffer(&entry, &out).map_err(err)?;
+    }
+    index.write().map_err(err)
+}
+
+/// Splits bytes into lines, each keeping its own terminator ("\n" or "\r\n").
+fn split_lines(bytes: &[u8]) -> Vec<&[u8]> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    for (i, b) in bytes.iter().enumerate() {
+        if *b == b'\n' {
+            lines.push(&bytes[start..=i]);
+            start = i + 1;
+        }
+    }
+    if start < bytes.len() {
+        lines.push(&bytes[start..]);
+    }
+    lines
+}
+
+/// True when most of the file's line endings are CRLF.
+fn mostly_crlf(bytes: &[u8]) -> bool {
+    let crlf = bytes.windows(2).filter(|w| w == b"\r\n").count();
+    let lf = bytes.iter().filter(|b| **b == b'\n').count();
+    crlf * 2 > lf
+}
+
+/// Restored lines come from the index (always "\n"); give them the file's own line ending.
+fn with_eol(line: &[u8], crlf: bool) -> Vec<u8> {
+    let mut out = line.to_vec();
+    if crlf && out.ends_with(b"\n") && !out.ends_with(b"\r\n") {
+        out.pop();
+        out.extend_from_slice(b"\r\n");
+    }
+    out
+}
+
+/// Throws away hunk `block` of the file's unstaged changes: the file on disk gets the index version
+/// of those lines back, the other changes stay. Cannot be undone.
+pub(crate) fn discard_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
+    let (diff, raw) = locate(repo, path, block, id)?;
+    let rel = Path::new(path);
+    let full = workdir(repo)?.join(rel);
+
+    if !full.exists() {
+        // Deleted on disk: discarding the deletion brings the file back from the index.
+        let mut index = repo.index().map_err(err)?;
+        let mut checkout = CheckoutBuilder::new();
+        checkout.force().path(path);
+        return repo.checkout_index(Some(&mut index), Some(&mut checkout)).map_err(err);
+    }
+
+    let bytes = std::fs::read(&full).map_err(|e| e.to_string())?;
+    let lines = split_lines(&bytes);
+    let in_file = diff.lines.iter().filter(|l| l.kind == "ctx" || l.kind == "add").count();
+    if lines.len() != in_file {
+        return Err(STALE.into());
+    }
+    let crlf = mostly_crlf(&bytes);
+
+    let mut out: Vec<u8> = Vec::new();
+    let mut at = 0; // position in the file on disk
+    for (line, old) in diff.lines.iter().zip(&raw) {
+        let mine = line.block == Some(block);
+        match line.kind {
+            "ctx" => {
+                out.extend_from_slice(lines[at]);
+                at += 1;
+            }
+            "add" => {
+                if !mine {
+                    out.extend_from_slice(lines[at]);
+                }
+                at += 1;
+            }
+            "del" if mine => out.extend_from_slice(&with_eol(old, crlf)),
+            _ => {}
+        }
+    }
+    std::fs::write(&full, out).map_err(|e| e.to_string())
+}
+
+async fn blocking(
+    path: String,
+    f: impl FnOnce(&Repository) -> Result<(), String> + Send + 'static,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || f(&Repository::discover(&path).map_err(err)?))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Stages one hunk of a file's unstaged changes. `block_id` is the hunk's fingerprint from the diff.
+#[tauri::command]
+pub async fn stage_hunk_cmd(path: String, file: String, block: usize, block_id: String) -> Result<(), String> {
+    blocking(path, move |r| stage_hunk(r, &file, block, &block_id)).await
+}
+
+/// Discards one hunk of a file's unstaged changes (not undoable).
+#[tauri::command]
+pub async fn discard_hunk_cmd(path: String, file: String, block: usize, block_id: String) -> Result<(), String> {
+    blocking(path, move |r| discard_hunk(r, &file, block, &block_id)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commit_detail::{working_diff_raw as diff_of};
+    use git2::Signature;
+    use std::fs;
+
+    fn setup(name: &str) -> (PathBuf, Repository) {
+        let dir = std::env::temp_dir().join(format!("gc-hunks-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let mut cfg = repo.config().unwrap();
+        cfg.set_str("user.name", "T").unwrap();
+        cfg.set_str("user.email", "t@example.com").unwrap();
+        (dir, repo)
+    }
+
+    fn commit_paths(repo: &Repository, paths: &[&str], msg: &str) {
+        let mut index = repo.index().unwrap();
+        for p in paths {
+            index.add_path(Path::new(p)).unwrap();
+        }
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = Signature::now("T", "t@example.com").unwrap();
+        let parents: Vec<_> = repo.head().ok().and_then(|h| h.peel_to_commit().ok()).into_iter().collect();
+        let refs: Vec<_> = parents.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &refs).unwrap();
+    }
+
+    fn lines(n: usize) -> Vec<String> {
+        (1..=n).map(|i| format!("line {i}")).collect()
+    }
+    fn text(v: &[String]) -> String {
+        v.join("\n") + "\n"
+    }
+    fn unstaged(repo: &Repository, p: &str) -> FileDiff {
+        diff_of(repo, p, false, true).unwrap().0
+    }
+    fn staged(repo: &Repository, p: &str) -> FileDiff {
+        diff_of(repo, p, true, true).unwrap().0
+    }
+    fn index_text(repo: &Repository, p: &str) -> String {
+        let idx = repo.index().unwrap();
+        let entry = idx.get_path(Path::new(p), 0).unwrap();
+        String::from_utf8(repo.find_blob(entry.id).unwrap().content().to_vec()).unwrap()
+    }
+
+    #[test]
+    fn stage_and_discard_single_hunks() {
+        let (dir, repo) = setup("basic");
+        fs::write(dir.join("a.txt"), text(&lines(30))).unwrap();
+        commit_paths(&repo, &["a.txt"], "base");
+
+        // Four separate hunks: two edits, a deletion and an addition at the end.
+        let mut v = lines(30);
+        v[2] = "line 3 CHANGED".into();
+        v[11] = "line 12 CHANGED".into();
+        v.remove(20);
+        v.push("line 31".into());
+        fs::write(dir.join("a.txt"), text(&v)).unwrap();
+        let d = unstaged(&repo, "a.txt");
+        assert_eq!(d.blocks.len(), 4);
+        assert_eq!(d.lines.iter().filter(|l| l.block == Some(1)).count(), 2, "one removed + one added line");
+
+        // A stale fingerprint is refused.
+        assert!(stage_hunk(&repo, "a.txt", 1, "0000000000000000").unwrap_err().contains("changed since"));
+        assert!(stage_hunk(&repo, "a.txt", 9, &d.blocks[0]).is_err());
+
+        // Stage hunk 1 only: the index gets just that edit, the file on disk is untouched.
+        stage_hunk(&repo, "a.txt", 1, &d.blocks[1]).unwrap();
+        let mut only_12 = lines(30);
+        only_12[11] = "line 12 CHANGED".into();
+        assert_eq!(index_text(&repo, "a.txt"), text(&only_12));
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), text(&v));
+        let (un, st) = (unstaged(&repo, "a.txt"), staged(&repo, "a.txt"));
+        assert_eq!((un.blocks.len(), st.blocks.len()), (3, 1));
+        assert_eq!((st.additions, st.deletions), (1, 1));
+
+        // Discard the first remaining hunk (the line-3 edit): only that change disappears from disk.
+        discard_hunk(&repo, "a.txt", 0, &un.blocks[0]).unwrap();
+        let mut expected = v.clone();
+        expected[2] = "line 3".into();
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), text(&expected));
+        let un = unstaged(&repo, "a.txt");
+        assert_eq!(un.blocks.len(), 2);
+        assert_eq!(index_text(&repo, "a.txt"), text(&only_12), "discarding never touches the index");
+
+        // Stage the appended line (the last hunk).
+        stage_hunk(&repo, "a.txt", 1, &un.blocks[1]).unwrap();
+        assert!(index_text(&repo, "a.txt").ends_with("line 31\n"));
+        assert_eq!(unstaged(&repo, "a.txt").blocks.len(), 1, "only the deletion of line 21 is left");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn crlf_files_keep_their_line_endings() {
+        let (dir, repo) = setup("crlf");
+        repo.config().unwrap().set_str("core.autocrlf", "true").unwrap();
+        fs::write(dir.join("w.txt"), text(&lines(20))).unwrap(); // LF in the repository
+        commit_paths(&repo, &["w.txt"], "base");
+
+        // On disk the file has CRLF endings and two edits.
+        let mut v = lines(20);
+        v[1] = "line 2 CHANGED".into();
+        v[15] = "line 16 CHANGED".into();
+        fs::write(dir.join("w.txt"), text(&v).replace('\n', "\r\n")).unwrap();
+        let d = unstaged(&repo, "w.txt");
+        assert_eq!(d.blocks.len(), 2, "line-ending conversion alone is not a change");
+
+        // Staging stores LF (as git would); the file on disk keeps CRLF.
+        stage_hunk(&repo, "w.txt", 0, &d.blocks[0]).unwrap();
+        let mut staged_text = lines(20);
+        staged_text[1] = "line 2 CHANGED".into();
+        assert_eq!(index_text(&repo, "w.txt"), text(&staged_text));
+        assert_eq!(fs::read_to_string(dir.join("w.txt")).unwrap(), text(&v).replace('\n', "\r\n"));
+
+        // Discarding restores the old line with the file's own CRLF ending.
+        let d = unstaged(&repo, "w.txt");
+        discard_hunk(&repo, "w.txt", 0, &d.blocks[0]).unwrap();
+        let mut expected = v.clone();
+        expected[15] = "line 16".into();
+        assert_eq!(fs::read_to_string(dir.join("w.txt")).unwrap(), text(&expected).replace('\n', "\r\n"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_final_newline_is_preserved() {
+        let (dir, repo) = setup("eof");
+        fs::write(dir.join("n.txt"), "a\nb").unwrap(); // no newline at the end
+        commit_paths(&repo, &["n.txt"], "base");
+
+        fs::write(dir.join("n.txt"), "a\nb\nc").unwrap();
+        let d = unstaged(&repo, "n.txt");
+        assert_eq!(d.blocks.len(), 1);
+        stage_hunk(&repo, "n.txt", 0, &d.blocks[0]).unwrap();
+        assert_eq!(index_text(&repo, "n.txt"), "a\nb\nc");
+
+        // Back to the committed state: discarding the same kind of change restores the exact bytes.
+        fs::write(dir.join("n.txt"), "a\nb\nc\nd").unwrap();
+        let d = unstaged(&repo, "n.txt");
+        discard_hunk(&repo, "n.txt", 0, &d.blocks[0]).unwrap();
+        assert_eq!(fs::read_to_string(dir.join("n.txt")).unwrap(), "a\nb\nc");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn deleted_untracked_and_binary_files() {
+        let (dir, repo) = setup("special");
+        fs::write(dir.join("gone.txt"), text(&lines(5))).unwrap();
+        fs::write(dir.join("bin.dat"), [0u8, 1, 2, 0, 255]).unwrap();
+        commit_paths(&repo, &["gone.txt", "bin.dat"], "base");
+
+        // Deleted on disk: staging the hunk stages the removal, discarding brings the file back.
+        fs::remove_file(dir.join("gone.txt")).unwrap();
+        let d = unstaged(&repo, "gone.txt");
+        assert_eq!(d.blocks.len(), 1);
+        discard_hunk(&repo, "gone.txt", 0, &d.blocks[0]).unwrap();
+        assert_eq!(fs::read_to_string(dir.join("gone.txt")).unwrap(), text(&lines(5)));
+        fs::remove_file(dir.join("gone.txt")).unwrap();
+        let d = unstaged(&repo, "gone.txt");
+        stage_hunk(&repo, "gone.txt", 0, &d.blocks[0]).unwrap();
+        assert!(repo.index().unwrap().get_path(Path::new("gone.txt"), 0).is_none());
+
+        // An untracked file has no index version to build from.
+        fs::write(dir.join("new.txt"), "x\n").unwrap();
+        let d = unstaged(&repo, "new.txt");
+        assert!(stage_hunk(&repo, "new.txt", 0, &d.blocks[0]).unwrap_err().contains("not tracked"));
+        assert!(discard_hunk(&repo, "new.txt", 0, &d.blocks[0]).unwrap_err().contains("not tracked"));
+        assert!(dir.join("new.txt").exists());
+
+        // Binary files are refused.
+        fs::write(dir.join("bin.dat"), [9u8, 0, 0, 0, 1]).unwrap();
+        assert!(stage_hunk(&repo, "bin.dat", 0, "x").unwrap_err().contains("Binary"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+}

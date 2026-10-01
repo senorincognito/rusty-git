@@ -61,6 +61,12 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   way. Unstaged compares the index with the file on disk (untracked files show as all added),
   Staged compares HEAD with the index. It refreshes when you edit, stage or return to the window,
   and keeps its scroll position.
+- Every run of changed lines is a **hunk** with its own heading ("Hunk 2 of 5 · +3 -1"), in all diff views. On
+  the *unstaged* diff of a tracked file each heading has **Stage hunk** (puts just that hunk into the staging
+  area) and **Discard hunk** (removes it from the file after a confirmation; cannot be undone). Line endings,
+  including CRLF files and a missing final newline, are preserved, and a hunk whose file changed since the diff
+  was shown is refused instead of applied to the wrong lines. New (untracked) files and binary files have no
+  hunk buttons: stage the whole file from the list.
 - While you have uncommitted changes, a notice at the top of the panel says how many files
   changed in the working directory, with a **View changes** button that closes the commit view
   and returns to the staging panel (your draft commit message is kept). The × does the same.
