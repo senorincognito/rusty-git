@@ -133,8 +133,11 @@ app rename so users keep their data. Don't change it casually.
 - **Stash** moves all uncommitted changes, **including untracked files** (not ignored ones), into a stash with an
   optional message (`Stash…` button beside Commit, `StashDialog`). Stashes are visible in the graph (hollow node
   off the base commit, `stash@{n}` chip, row `isStash`) and in a left-panel `Stashes` section; clicking either
-  opens the stash's `CommitDetail`, which has a **Pop** button (`pop_stash`: apply, check for conflicts, then drop;
-  re-stages what was staged). Pop requires a clean working directory (disabled in the UI, enforced in Rust) so a
+  opens the stash's `CommitDetail`. **Pop** is a button in that panel's bottom footer (`cd-footer`, mirroring
+  the Stash button under the staging lists) and a *Pop stash* item in the right-click menu of a Stashes row
+  (`pop_stash`: apply, check for conflicts, then drop;
+  re-stages what was staged). Pop requires a clean working directory (disabled in the UI via
+  `useWorkingChangeCount`, enforced in Rust) so a
   conflicting pop can be undone exactly (`restore_clean`) with the stash kept. Apply-without-drop and drop
   are not built yet.
 - Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;

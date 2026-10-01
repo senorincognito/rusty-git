@@ -102,6 +102,10 @@ export default function RepoView({
           onChanged={reload}
           selectedId={selectedCommit?.id ?? null}
           onSelectCommit={selectCommit}
+          onStashPopped={(id) => {
+            if (selectedCommit?.id === id) closeCommit(); // its detail view has nothing left to show
+            reload();
+          }}
         />
         <div className="center">
           {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}

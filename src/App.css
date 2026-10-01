@@ -1448,15 +1448,17 @@ body.resizing {
   color: var(--muted);
 }
 
-.primary.small {
-  padding: 3px 14px;
-  font-size: 12px;
+/* Action bar at the bottom of the commit/stash detail panel (like the Commit/Stash buttons below the staging lists) */
+.cd-footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
 }
 
-.stash-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+.cd-footer p {
+  margin: 0;
   font-size: 12px;
 }

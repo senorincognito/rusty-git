@@ -72,7 +72,8 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 - Stashes show up in the commit graph as hollow nodes hanging off the commit they were made on, labelled
   `stash@{n}`, and in a **Stashes** section in the left panel (newest first). Click one in either place
   to see its message, base commit and changed files, untracked files included, and open any file's diff.
-- **Pop** (in the stash's detail panel) applies the stash to the working directory and removes it from the
+- **Pop** (the button at the bottom of the stash's detail panel, or right-click the stash in the
+  Stashes list and choose *Pop stash*) applies the stash to the working directory and removes it from the
   list, putting back staged changes as staged and restoring untracked files. It needs a clean working
   directory (the button is disabled otherwise). If the stash would conflict, the pop is undone completely
   and the stash is kept. Applying without removing, and dropping, are not available yet.

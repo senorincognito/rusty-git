@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { getStatus } from "@/api/changes";
+import { useEffect, useState } from "react";
 import { getCommitDetail, type CommitDetail as CommitDetailData, type CommitFile } from "@/api/commit";
 import { popStash } from "@/api/stash";
 import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
@@ -32,11 +32,10 @@ export default function CommitDetail({
 }) {
   const [detail, setDetail] = useState<CommitDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [workingChanges, setWorkingChanges] = useState(0);
+  const workingChanges = useWorkingChangeCount(path, refreshKey);
   const [popping, setPopping] = useState(false);
   const [popError, setPopError] = useState<string | null>(null);
   const startDetail = useLatestRequest();
-  const startStatus = useLatestRequest();
 
   useEffect(() => {
     const isCurrent = startDetail();
@@ -46,26 +45,6 @@ export default function CommitDetail({
       .then((d) => isCurrent() && setDetail(d))
       .catch((e) => isCurrent() && setError(String(e)));
   }, [path, commit.id, startDetail]);
-
-  // How many files have uncommitted changes (a file that is both staged and edited counts once).
-  const refreshStatus = useCallback(async () => {
-    const isCurrent = startStatus();
-    try {
-      const changes = await getStatus(path);
-      if (isCurrent()) setWorkingChanges(changes.length);
-    } catch {
-      if (isCurrent()) setWorkingChanges(0);
-    }
-  }, [path, startStatus]);
-
-  useEffect(() => {
-    refreshStatus();
-  }, [refreshStatus, refreshKey]);
-
-  useEffect(() => {
-    window.addEventListener("focus", refreshStatus);
-    return () => window.removeEventListener("focus", refreshStatus);
-  }, [refreshStatus]);
 
   useEffect(() => {
     setPopError(null);
@@ -119,26 +98,6 @@ export default function CommitDetail({
                 <p className="cd-line">
                   <strong>{detail.stash}</strong>: every uncommitted change that was saved here, including untracked files
                 </p>
-                <div className="stash-actions">
-                  <button
-                    className="primary small"
-                    disabled={popping || workingChanges > 0}
-                    onClick={pop}
-                    title={
-                      workingChanges > 0
-                        ? "Commit or stash your uncommitted changes first"
-                        : "Apply this stash to the working directory and remove it from the list"
-                    }
-                  >
-                    {popping ? "Popping…" : "Pop"}
-                  </button>
-                  <span className="muted">
-                    {workingChanges > 0
-                      ? "Needs a clean working directory"
-                      : "Applies it and removes it from the list"}
-                  </span>
-                </div>
-                {popError && <p className="error cd-line">{popError}</p>}
               </>
             )}
             <p className="cd-line">
@@ -186,6 +145,27 @@ export default function CommitDetail({
             )}
           </section>
         </>
+      )}
+
+      {/* Like the Stash button in the staging panel: the action sits at the bottom. */}
+      {detail?.stash && (
+        <footer className="cd-footer">
+          {popError && <p className="error">{popError}</p>}
+          {workingChanges > 0 && (
+            <p className="muted">
+              Commit or stash your uncommitted changes first: a stash can only be popped onto a clean working
+              directory.
+            </p>
+          )}
+          <button
+            className="primary"
+            disabled={popping || workingChanges > 0}
+            onClick={pop}
+            title="Apply this stash to the working directory and remove it from the list"
+          >
+            {popping ? "Popping…" : "Pop stash"}
+          </button>
+        </footer>
       )}
     </aside>
   );
