@@ -39,12 +39,37 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   HEAD, index and ref changes. File lists also refresh when
   the window regains focus, so edits made in your editor show up.
 
+### Branches and remotes (left panel)
+- **Local branches**: alphabetical list with the current branch highlighted and `↑n` / `↓n`
+  when ahead of or behind the upstream. Double-click a branch to check it out (safe
+  checkout: refused if uncommitted changes would be overwritten).
+- **Branch** button: create a branch from the current commit and check it out; the name is
+  validated and uncommitted changes carry over.
+- **Remotes**: shows `origin` with its URL and remote branches. When there is no origin yet,
+  a form adds one.
+- **Context menus** on branches: *Delete branch* (disabled for the checked-out branch) and
+  *Delete remote branch* (disabled for the branch the checked-out branch tracks). Both
+  confirm first and warn when commits would exist nowhere else. Remote deletion runs
+  `git push origin --delete`.
+
+### Fetch, pull and push
+- Title-bar buttons run the system `git`, so your credential helper and SSH setup apply.
+- Fetch updates all remotes (with prune). Pull is fast-forward only, so it never creates a
+  surprise merge. Push publishes a new branch to `origin` and sets its upstream.
+- Buttons show `↓n` / `↑n` counts and are disabled with a tooltip when they can't work.
+
+### Terminal
+- Toggle a real terminal (PowerShell on Windows, your login shell on macOS) in the
+  repository folder with the **>_ Terminal** button or the Ctrl + Backquote shortcut. Resizable, keeps its
+  session while hidden, restarts when you switch repositories.
+- Anything you run there (commits, checkouts, ...) shows up in the UI through live reload.
+
 ## Not yet implemented
 
 - Diff view and commit detail panel
-- Sidebar for branches, remotes, tags and stashes
-- Branch create / checkout / merge / rebase
-- Fetch, pull and push, and credential handling
+- Tags and stashes in the sidebar, remote branch checkout
+- Merge / rebase, rename branch, push or pull from the context menu
+- Multiple remotes (only `origin` is handled)
 - Amend, discard changes, stash
 - Renames are shown as a delete plus an add
 
@@ -68,7 +93,15 @@ cargo test --manifest-path src-tauri/Cargo.toml   # backend tests
 | `src-tauri/src/graph.rs` | Commit walk, ref labels, lane layout (with tests) |
 | `src-tauri/src/changes.rs` | Status, stage / unstage, create commit (with tests) |
 | `src-tauri/src/watch.rs` | Watches `.git` and emits `repo-changed` for live reload |
+| `src-tauri/src/branches.rs` | Local branches, create / checkout / delete (with tests) |
+| `src-tauri/src/remotes.rs` | Origin info, add origin, delete remote branch (with tests) |
+| `src-tauri/src/sync.rs` | Fetch / pull / push via system git, ahead/behind (with tests) |
+| `src-tauri/src/terminal.rs` | Pseudo-terminal sessions (with tests) |
 | `src/git.ts` | Typed wrappers around the Tauri commands |
 | `src/Graph.tsx` | Virtualised commit graph |
 | `src/Changes.tsx` | Staging and commit panel |
+| `src/Sidebar.tsx` | Local branches and remotes panel |
+| `src/SyncBar.tsx`, `src/BranchButton.tsx` | Title-bar buttons |
+| `src/ContextMenu.tsx` | Reusable context menu (portal popover) |
+| `src/TerminalPanel.tsx` | xterm.js terminal panel |
 | `src/App.tsx` | Welcome screen and repo view |

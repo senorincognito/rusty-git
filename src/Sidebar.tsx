@@ -2,11 +2,17 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   addOriginRemote,
   checkoutLocalBranch,
+  confirmDialog,
+  countUnmergedCommits,
+  countUnmergedRemoteCommits,
+  deleteLocalBranch,
+  deleteRemoteBranch,
   getLocalBranches,
   getOrigin,
   type BranchInfo,
   type RemoteInfo,
 } from "./git";
+import ContextMenu from "./ContextMenu";
 
 function Section({
   title,
@@ -70,6 +76,27 @@ function LocalBranches({
     }
   };
 
+  const [menu, setMenu] = useState<{ x: number; y: number; branch: BranchInfo } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  const deleteBranch = async (b: BranchInfo) => {
+    try {
+      const unmerged = await countUnmergedCommits(path, b.name);
+      const message =
+        unmerged > 0
+          ? `"${b.name}" has ${unmerged} commit${unmerged === 1 ? "" : "s"} that are not merged into the current branch or pushed to its upstream. They will be hard to recover once the branch is gone.
+
+Delete "${b.name}" anyway?`
+          : `Delete branch "${b.name}"?`;
+      if (!(await confirmDialog(message, "Delete branch", unmerged > 0))) return;
+      await deleteLocalBranch(path, b.name);
+      setError(null);
+      onChanged();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   useEffect(() => {
     refresh();
   }, [refresh, refreshKey]);
@@ -82,9 +109,13 @@ function LocalBranches({
         {branches?.map((b) => (
           <li
             key={b.name}
-            className={b.isHead ? "current" : ""}
+            className={(b.isHead ? "current" : "") + (menu?.branch.name === b.name ? " ctx" : "")}
             title={b.isHead ? `${b.name} (current)` : `Double-click to check out ${b.name}`}
             onDoubleClick={() => switchTo(b)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, branch: b });
+            }}
           >
             <span className="bname">{b.name}</span>
             {b.behind > 0 && <span className="sync">↓{b.behind}</span>}
@@ -92,6 +123,24 @@ function LocalBranches({
           </li>
         ))}
       </ul>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={[
+            {
+              label: "Delete branch",
+              danger: true,
+              disabled: menu.branch.isHead,
+              title: menu.branch.isHead
+                ? "The checked-out branch can't be deleted. Switch to another branch first."
+                : undefined,
+              onClick: () => deleteBranch(menu.branch),
+            },
+          ]}
+        />
+      )}
     </Section>
   );
 }
@@ -151,6 +200,9 @@ function Remotes({
   const [origin, setOrigin] = useState<RemoteInfo | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(0);
+  const [menu, setMenu] = useState<{ x: number; y: number; branch: string } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const [busy, setBusy] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const id = ++latest.current;
@@ -166,7 +218,36 @@ function Remotes({
 
   useEffect(() => {
     setOrigin(undefined);
+    setMenu(null);
   }, [path]);
+
+  const deleteBranch = async (name: string) => {
+    if (!origin) return;
+    const full = `${origin.name}/${name}`;
+    try {
+      const unique = await countUnmergedRemoteCommits(path, name);
+      const warning =
+        unique > 0
+          ? `
+
+${unique} commit${unique === 1 ? "" : "s"} on it exist nowhere else: not in your current branch or any local branch.`
+          : "";
+      const ok = await confirmDialog(
+        `Delete "${full}" from the remote? The branch is removed on the server for everyone who uses it.${warning}`,
+        "Delete remote branch",
+        true,
+      );
+      if (!ok) return;
+      setBusy(full);
+      setError(null);
+      await deleteRemoteBranch(path, name);
+      onChanged();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
 
   useEffect(() => {
     refresh();
@@ -175,6 +256,7 @@ function Remotes({
   return (
     <Section title="Remotes" count={origin ? origin.branches.length : undefined}>
       {error && <p className="error side-msg">{error}</p>}
+      {busy && <p className="muted side-msg">Deleting {busy}…</p>}
       {origin === null && <AddOrigin path={path} onAdded={onChanged} />}
       {origin && (
         <>
@@ -187,12 +269,39 @@ function Remotes({
           )}
           <ul className="branchlist">
             {origin.branches.map((b) => (
-              <li key={b} title={`${origin.name}/${b}`}>
+              <li
+                key={b}
+                className={menu?.branch === b ? "ctx" : ""}
+                title={`${origin.name}/${b}`}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({ x: e.clientX, y: e.clientY, branch: b });
+                }}
+              >
                 <span className="bname">{b}</span>
               </li>
             ))}
           </ul>
         </>
+      )}
+      {menu && origin && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={[
+            {
+              label: "Delete remote branch",
+              danger: true,
+              disabled: busy !== null || origin.trackedByHead === menu.branch,
+              title:
+                origin.trackedByHead === menu.branch
+                  ? "This is the upstream of the checked-out branch. Switch branches first."
+                  : undefined,
+              onClick: () => deleteBranch(menu.branch),
+            },
+          ]}
+        />
       )}
     </Section>
   );

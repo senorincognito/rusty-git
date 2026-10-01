@@ -45,7 +45,7 @@ fn sync_status(repo: &Repository) -> Result<SyncStatus, String> {
 }
 
 /// Runs the system `git` so the user's credential helpers, SSH agent and config all apply.
-fn run_git(path: &str, args: &[&str]) -> Result<String, String> {
+pub(crate) fn run_git(path: &str, args: &[&str]) -> Result<String, String> {
     let mut cmd = Command::new("git");
     cmd.arg("-C")
         .arg(path)

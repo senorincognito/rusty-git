@@ -639,6 +639,8 @@ button {
   min-height: 0;
   padding: 4px 8px;
   overflow: hidden;
+}
+
 /* Branch button sits first in the right-hand group; the sync buttons follow it. */
 .branchbtn {
   position: relative;
@@ -692,4 +694,42 @@ button {
 
 .branchlist li {
   user-select: none; /* double-click switches branches; don't select the text */
+}
+
+.branchlist li.ctx {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ctxmenu {
+  position: fixed;
+  z-index: 100;
+  min-width: 170px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.ctxitem {
+  padding: 6px 10px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.ctxitem:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ctxitem.danger:not(:disabled) {
+  color: var(--danger);
+}
+
+.ctxitem:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

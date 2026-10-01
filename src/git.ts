@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { ask, open } from "@tauri-apps/plugin-dialog";
 
 export interface RepoInfo {
   path: string;
@@ -103,6 +103,8 @@ export interface RemoteInfo {
   name: string;
   url: string;
   branches: string[];
+  /** Remote branch tracked by the checked-out local branch, if any. */
+  trackedByHead: string | null;
 }
 
 /** The origin remote, or null if the repo has none. */
@@ -123,3 +125,25 @@ export const createBranch = (path: string, name: string) =>
 /** Switches to an existing local branch; rejects if local changes would be overwritten. */
 export const checkoutLocalBranch = (path: string, name: string) =>
   invoke<void>("checkout_local_branch", { path, name });
+
+/** Number of commits that would be left unreachable by deleting the branch (0 if merged). */
+export const countUnmergedCommits = (path: string, name: string) =>
+  invoke<number>("count_unmerged_commits", { path, name });
+export const deleteLocalBranch = (path: string, name: string) =>
+  invoke<void>("delete_local_branch", { path, name });
+
+/** Native yes/no dialog. */
+export const confirmDialog = (message: string, title: string, danger = false) =>
+  ask(message, {
+    title,
+    kind: danger ? "warning" : "info",
+    okLabel: "Delete",
+    cancelLabel: "Cancel",
+  });
+
+/** Commits that exist only on origin/<name> (not in HEAD or any local branch). */
+export const countUnmergedRemoteCommits = (path: string, name: string) =>
+  invoke<number>("count_unmerged_remote_commits", { path, name });
+/** Deletes origin/<name> on the server. */
+export const deleteRemoteBranch = (path: string, name: string) =>
+  invoke<string>("delete_remote_branch", { path, name });

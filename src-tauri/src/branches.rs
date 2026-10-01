@@ -138,6 +138,55 @@ pub async fn checkout_local_branch(path: String, name: String) -> Result<(), Str
     .map_err(|e| e.to_string())?
 }
 
+/// Commits on `name` that are neither in the current HEAD nor on its upstream, i.e. work
+/// that would become unreachable by deleting the branch (same rule as `git branch -d`).
+fn unmerged_commits(repo: &Repository, name: &str) -> Result<usize, String> {
+    let branch = repo
+        .find_branch(name, BranchType::Local)
+        .map_err(|_| format!("Branch \"{name}\" not found"))?;
+    let tip = branch.get().peel_to_commit().map_err(err)?.id();
+
+    let mut walk = repo.revwalk().map_err(err)?;
+    walk.push(tip).map_err(err)?;
+    if let Ok(head) = repo.head().and_then(|h| h.peel_to_commit()) {
+        walk.hide(head.id()).map_err(err)?;
+    }
+    if let Some(up) = branch.upstream().ok().and_then(|u| u.get().target()) {
+        walk.hide(up).map_err(err)?;
+    }
+    Ok(walk.count())
+}
+
+fn delete_branch_checked(repo: &Repository, name: &str) -> Result<(), String> {
+    let mut branch = repo
+        .find_branch(name, BranchType::Local)
+        .map_err(|_| format!("Branch \"{name}\" not found"))?;
+    if branch.is_head() {
+        return Err("Cannot delete the branch that is currently checked out".into());
+    }
+    branch.delete().map_err(err)
+}
+
+/// Number of commits that deleting `name` would leave unreachable (0 when fully merged).
+#[tauri::command]
+pub async fn count_unmerged_commits(path: String, name: String) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        unmerged_commits(&Repository::discover(&path).map_err(err)?, &name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Deletes a local branch. The checked-out branch is refused.
+#[tauri::command]
+pub async fn delete_local_branch(path: String, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        delete_branch_checked(&Repository::discover(&path).map_err(err)?, &name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,6 +299,41 @@ mod tests {
         std::fs::write(dir.join("notes.txt"), "mine").unwrap();
         checkout_branch(&repo, "feature").unwrap();
         assert_eq!(read("notes.txt").as_deref(), Some("mine"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_branch_rules() {
+        let dir = std::env::temp_dir().join(format!("gc-delbranch-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+
+        let c1 = commit_files(&repo, "refs/heads/main", &[], &[("a.txt", "one")]);
+        repo.set_head("refs/heads/main").unwrap();
+        let c2 = commit_files(&repo, "refs/heads/feature", &[c1], &[("a.txt", "two")]);
+        commit_files(&repo, "refs/heads/feature", &[c2], &[("a.txt", "three")]);
+        repo.branch("merged", &repo.find_commit(c1).unwrap(), false).unwrap();
+
+        assert_eq!(unmerged_commits(&repo, "merged").unwrap(), 0);
+        assert_eq!(unmerged_commits(&repo, "feature").unwrap(), 2);
+        assert_eq!(unmerged_commits(&repo, "main").unwrap(), 0);
+        assert!(unmerged_commits(&repo, "nope").is_err());
+
+        // Commits already on the upstream don't count as lost.
+        repo.remote("origin", "https://example.com/r.git").unwrap();
+        let tip = repo.find_branch("feature", BranchType::Local).unwrap().get().target().unwrap();
+        repo.reference("refs/remotes/origin/feature", tip, true, "test").unwrap();
+        repo.find_branch("feature", BranchType::Local).unwrap().set_upstream(Some("origin/feature")).unwrap();
+        assert_eq!(unmerged_commits(&repo, "feature").unwrap(), 0);
+
+        // The checked-out branch can't be deleted; others can.
+        assert!(delete_branch_checked(&repo, "main").unwrap_err().contains("checked out"));
+        delete_branch_checked(&repo, "merged").unwrap();
+        delete_branch_checked(&repo, "feature").unwrap();
+        let names: Vec<_> = local_branches(&repo).unwrap().into_iter().map(|b| b.name).collect();
+        assert_eq!(names, ["main"]);
+        assert!(delete_branch_checked(&repo, "merged").unwrap_err().contains("not found"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

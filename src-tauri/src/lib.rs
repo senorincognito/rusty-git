@@ -16,7 +16,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             branches::checkout_local_branch,
+            branches::count_unmerged_commits,
             branches::create_branch,
+            branches::delete_local_branch,
             branches::get_local_branches,
             changes::get_status,
             changes::stage_paths,
@@ -26,6 +28,8 @@ pub fn run() {
             repo::open_repo,
             repo::get_recent_repos,
             repo::remove_recent_repo,
+            remotes::count_unmerged_remote_commits,
+            remotes::delete_remote_branch,
             remotes::get_origin,
             remotes::add_origin_remote,
             sync::get_sync_status,
