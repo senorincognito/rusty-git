@@ -11,6 +11,40 @@
   overflow-y: auto;
 }
 
+// The filter field at the very top; it stays in view while the lists scroll.
+.sidefilter {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: none;
+  padding: 8px 12px;
+  background: $panel;
+  border-bottom: 1px solid $border;
+
+  input {
+    @include text-field;
+    width: 100%;
+    padding-right: 26px; // room for the clear button
+  }
+}
+
+.sidefilter-clear {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  padding: 0 6px;
+  background: none;
+  border: 0;
+  color: $muted;
+  font-size: 16px;
+  line-height: 1;
+
+  &:hover {
+    color: $text;
+  }
+}
+
 // ---- Branch and stash lists ----
 .branchlist {
   margin: 0;

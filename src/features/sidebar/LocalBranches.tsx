@@ -13,15 +13,19 @@ import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import NewBranchForm from "@/features/toolbar/NewBranchForm";
 import BranchNameInput from "./BranchNameInput";
+import { matchesFilter } from "./filter";
 
 export default function LocalBranches({
   path,
   refreshKey,
   onChanged,
+  filter,
 }: {
   path: string;
   refreshKey: number;
   onChanged: () => void;
+  /** Only branches whose name matches are listed. */
+  filter: string;
 }) {
   const [branches, setBranches] = useState<BranchInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +58,7 @@ export default function LocalBranches({
     }
   };
 
+  const shown = branches?.filter((b) => matchesFilter(filter, b.name));
   const [menu, setMenu] = useState<{ x: number; y: number; branch: BranchInfo } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   // The "⋯" menu in the section's headline, and the inline new-branch form it opens.
@@ -99,7 +104,7 @@ Delete "${b.name}" anyway?`
   return (
     <Section
       title="Local branches"
-      count={branches?.length}
+      count={shown?.length}
       action={{
         label: "Branch actions",
         active: sectionMenu !== null,
@@ -119,8 +124,9 @@ Delete "${b.name}" anyway?`
       )}
       {error && <p className="error side-msg">{error}</p>}
       {branches?.length === 0 && <p className="muted side-msg">No branches yet.</p>}
+      {branches && branches.length > 0 && shown?.length === 0 && <p className="muted side-msg">No branch matches the filter.</p>}
       <ul className="branchlist">
-        {branches?.map((b) => (
+        {shown?.map((b) => (
           <li
             key={b.name}
             className={(b.isHead ? "current" : "") + (menu?.branch.name === b.name ? " ctx" : "")}

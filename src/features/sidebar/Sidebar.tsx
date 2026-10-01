@@ -1,3 +1,4 @@
+import { useState } from "react";
 import ResizablePanel from "@/components/ResizablePanel";
 import LocalBranches from "./LocalBranches";
 import Remotes from "./Remotes";
@@ -27,16 +28,41 @@ export default function Sidebar({
   /** A stash was deleted from the list (by its commit id). */
   onStashDropped: (id: string) => void;
 }) {
+  // One filter for every list below: local branches, remote branches and stashes.
+  const [filter, setFilter] = useState("");
   return (
     <ResizablePanel edge="right" storageKey="sidebarWidth" defaultWidth={240}>
       <nav className="sidebar">
-        <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} />
-        <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} fetchError={fetchError} />
+        <div className="sidefilter">
+          <input
+            type="text"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && filter !== "") {
+                e.preventDefault();
+                setFilter("");
+              }
+            }}
+            placeholder="Filter branches and stashes…"
+            aria-label="Filter branches and stashes"
+            spellCheck={false}
+            autoComplete="off"
+          />
+          {filter !== "" && (
+            <button className="sidefilter-clear" title="Clear the filter (Esc)" aria-label="Clear the filter" onClick={() => setFilter("")}>
+              ×
+            </button>
+          )}
+        </div>
+        <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} filter={filter} />
+        <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} fetchError={fetchError} filter={filter} />
         <Stashes
           path={path}
           refreshKey={refreshKey}
           selectedId={selectedId}
           onSelect={onSelectCommit}
+          filter={filter}
           onPopped={onStashPopped}
           onDropped={onStashDropped}
         />

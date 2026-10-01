@@ -15,6 +15,7 @@ import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import AddRemote from "./AddRemote";
 import BranchNameInput from "./BranchNameInput";
+import { matchesFilter } from "./filter";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -23,12 +24,15 @@ export default function Remotes({
   refreshKey,
   onChanged,
   fetchError,
+  filter,
 }: {
   path: string;
   refreshKey: number;
   onChanged: () => void;
   /** Why the last fetch failed, if it did: shown as a warning beside each remote's name. */
   fetchError: string | null;
+  /** Only branches whose name (or "remote/name") matches are listed; a remote whose own name matches shows all of its branches. */
+  filter: string;
 }) {
   const [remotes, setRemotes] = useState<RemoteInfo[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -174,6 +178,14 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
     }
   };
 
+  // With a filter, a remote shows only the branches that match (all of them when its own name matches);
+  // remotes with nothing to show are hidden.
+  const visible = remotes
+    ?.map((r) => ({
+      r,
+      branches: matchesFilter(filter, r.name) ? r.branches : r.branches.filter((b) => matchesFilter(filter, `${r.name}/${b}`)),
+    }))
+    .filter(({ r, branches }) => filter.trim() === "" || branches.length > 0 || matchesFilter(filter, r.name));
   const several = (remotes?.length ?? 0) > 1;
   const headRemote = headMenu ? remotes?.find((r) => r.name === headMenu.remote) : undefined;
   const branchRemote = menu ? remotes?.find((r) => r.name === menu.remote) : undefined;
@@ -181,7 +193,7 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
   return (
     <Section
       title="Remotes"
-      count={remotes?.length}
+      count={visible?.length}
       action={{
         label: "Remote actions",
         active: sectionMenu !== null,
@@ -202,7 +214,10 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
           onCancel={() => setAdding(false)}
         />
       )}
-      {remotes?.map((r) => (
+      {remotes && remotes.length > 0 && visible?.length === 0 && (
+        <p className="muted side-msg">No remote branch matches the filter.</p>
+      )}
+      {visible?.map(({ r, branches }) => (
         <div key={r.name} className="remote">
           <div
             className={"remote-head" + (headMenu?.remote === r.name ? " ctx" : "")}
@@ -236,9 +251,9 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
               <span className="rurl">{r.url}</span>
             )}
           </div>
-          {r.branches.length === 0 && <p className="muted side-msg">No remote branches yet. Fetch to load them.</p>}
+          {branches.length === 0 && r.branches.length === 0 && <p className="muted side-msg">No remote branches yet. Fetch to load them.</p>}
           <ul className="branchlist">
-            {r.branches.map((b) => (
+            {branches.map((b) => (
               <li
                 key={b}
                 className={menu?.remote === r.name && menu.branch === b ? "ctx" : ""}

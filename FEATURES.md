@@ -127,6 +127,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 - **Branch** button: create a branch from the current commit and check it out; the name is
   validated and uncommitted changes carry over.
   The **⋯** button in the Local branches headline has *New branch…*, which opens the same name form inline.
+- **Filter** (the field at the very top of the left panel): type part of a name to narrow the local branches, remote
+  branches (matched as `origin/name`, or all of a remote's branches when the remote's name matches) and stashes (by message
+  or `stash@{n}`) at once. Several words must all match, case does not matter; Esc or the × clears it.
 - **Remotes**: every remote of the repository with its URL and remote branches. The **⋯** button in the section's headline opens a menu with
   *Add remote…* (a name and URL form; shown right away when there is none yet) and, with several remotes, a *Target
   remote* group to pick the target. Right-click a remote's header for *Set as target*, *Edit URL* (Enter

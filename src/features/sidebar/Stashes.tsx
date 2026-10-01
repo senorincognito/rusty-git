@@ -4,6 +4,7 @@ import { dropStash, getStashes, popStash, type StashEntry } from "@/api/stash";
 import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import { matchesFilter } from "./filter";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
 
 /**
@@ -17,6 +18,7 @@ export default function Stashes({
   onSelect,
   onPopped,
   onDropped,
+  filter,
 }: {
   path: string;
   refreshKey: number;
@@ -27,12 +29,15 @@ export default function Stashes({
   onPopped: (id: string) => void;
   /** A stash was deleted without being applied (by its commit id). */
   onDropped: (id: string) => void;
+  /** Only stashes whose message or "stash@{n}" matches are listed. */
+  filter: string;
 }) {
   const [stashes, setStashes] = useState<StashEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; stash: StashEntry } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const [popping, setPopping] = useState(false);
+  const shown = stashes?.filter((s) => matchesFilter(filter, s.message, `stash@{${s.index}}`));
   const workingChanges = useWorkingChangeCount(path, refreshKey);
   const start = useLatestRequest();
 
@@ -88,11 +93,12 @@ Its changes are not applied, and they are lost: git has no undo for this.`,
   };
 
   return (
-    <Section title="Stashes" count={stashes?.length}>
+    <Section title="Stashes" count={shown?.length}>
       {error && <p className="error side-msg">{error}</p>}
       {stashes?.length === 0 && <p className="muted side-msg">No stashes.</p>}
+      {stashes && stashes.length > 0 && shown?.length === 0 && <p className="muted side-msg">No stash matches the filter.</p>}
       <ul className="branchlist stashlist">
-        {stashes?.map((s) => (
+        {shown?.map((s) => (
           <li
             key={s.id}
             className={(s.id === selectedId ? "selected" : "") + (menu?.stash.id === s.id ? " ctx" : "")}
