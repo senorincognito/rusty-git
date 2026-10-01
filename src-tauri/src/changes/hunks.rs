@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use git2::build::CheckoutBuilder;
 use git2::{IndexEntry, IndexTime, Oid, Repository};
 
-use crate::commit_detail::{working_diff_raw, FileDiff};
+use crate::commit::{working_diff_raw, FileDiff};
 
 fn err(e: git2::Error) -> String {
     e.message().to_string()
@@ -254,7 +254,7 @@ pub async fn discard_hunk_cmd(path: String, file: String, block: usize, block_id
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commit_detail::working_diff_raw as diff_of;
+    use crate::commit::working_diff_raw as diff_of;
     use git2::Signature;
     use std::fs;
 

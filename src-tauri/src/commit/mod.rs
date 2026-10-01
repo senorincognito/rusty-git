@@ -53,7 +53,7 @@ fn commit_detail(repo: &Repository, id: &str) -> Result<CommitDetail, String> {
     let tree = commit.tree().map_err(err)?;
     // The root commit has no parent: everything in it counts as added.
     let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
-    let stash_index = crate::stash::stash_index_of(repo, oid);
+    let stash_index = crate::sidebar::stash::stash_index_of(repo, oid);
 
     let mut opts = DiffOptions::new();
     opts.include_typechange(true);
@@ -85,7 +85,7 @@ fn commit_detail(repo: &Repository, id: &str) -> Result<CommitDetail, String> {
         })
         .collect();
     // A stash keeps its untracked files in a separate commit; list them as additions.
-    if let Some(untracked) = crate::stash::untracked_tree(repo, &commit) {
+    if let Some(untracked) = crate::sidebar::stash::untracked_tree(repo, &commit) {
         let extra = repo.diff_tree_to_tree(None, Some(&untracked), None).map_err(err)?;
         for d in extra.deltas() {
             if let Some(p) = d.new_file().path() {
@@ -307,7 +307,7 @@ fn file_diff(
     let out = render_diff(&diff, full_file)?;
     // A stash keeps its untracked files in a separate commit; a file only found there shows as added.
     if out.lines.is_empty() && !out.binary {
-        if let Some(untracked) = crate::stash::untracked_tree(repo, &commit) {
+        if let Some(untracked) = crate::sidebar::stash::untracked_tree(repo, &commit) {
             let mut opts = diff_options(path, None, full_file);
             let diff = repo.diff_tree_to_tree(None, Some(&untracked), Some(&mut opts)).map_err(err)?;
             return render_diff(&diff, full_file);
@@ -564,7 +564,7 @@ mod tests {
         let c1 = commit_all(&repo, "base", &[]);
         fs::write(dir.join("a.txt"), "two").unwrap();
         fs::write(dir.join("new.txt"), "untracked\nfile\n").unwrap();
-        let stash = crate::stash::save_stash(&mut repo, Some("wip")).unwrap();
+        let stash = crate::sidebar::stash::save_stash(&mut repo, Some("wip")).unwrap();
 
         let d = commit_detail(&repo, &stash.to_string()).unwrap();
         assert_eq!(d.stash.as_deref(), Some("stash@{0}"));

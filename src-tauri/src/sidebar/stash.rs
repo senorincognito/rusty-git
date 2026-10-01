@@ -91,7 +91,7 @@ pub(crate) fn save_stash_paths(repo: &Repository, paths: &[String]) -> Result<()
 
     let mut args = vec!["--literal-pathspecs", "stash", "push", "--include-untracked", "--"];
     args.extend(paths.iter().map(String::as_str));
-    crate::sync::run_git(workdir, &args).map(|_| ())
+    crate::toolbar::sync::run_git(workdir, &args).map(|_| ())
 }
 
 /// Puts the working directory back to a clean checkout of HEAD, untracked files included.

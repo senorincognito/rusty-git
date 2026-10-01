@@ -31,27 +31,39 @@ say plainly that UI behaviour is untested in the running app.
 ## Architecture
 
 **Data flow.** The frontend calls typed wrappers in `src/api/*`, which `invoke()` Tauri commands in
-`src-tauri/src/*`. `watch.rs` watches `.git` (HEAD, index, `refs/`) and emits `repo-changed`;
+`src-tauri/src/*`. `repo/watch.rs` watches `.git` (HEAD, index, `refs/`) and emits `repo-changed`;
 `RepoView` listens, bumps `graphKey`, and every panel reloads from it. So any change made anywhere
 (terminal, editor, another tool) shows up without a manual refresh.
 
 ### Backend (`src-tauri/src/`)
 
-| Module | Commands / role |
-| --- | --- |
-| `reset.rs` | `get_reset_info` (what a reset would remove/add, pushed count, uncommitted files), `reset_to_commit` (soft/mixed/hard) |
-| `repo.rs` | `open_repo`, recent repos (JSON in the app data dir) |
-| `graph.rs` | `get_graph`: revwalk over all refs, lane layout computed in Rust, `on_head` flag per row |
-| `changes.rs` | status, stage/unstage, `discard_paths` (whole-file discard), `create_commit` (new or `amend`), `get_head_commit` |
-| `hunks.rs` | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see Product decisions) |
-| `commit_detail.rs` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
-| `history.rs` | `get_rename_info`, `rename_commit_message`, `get_rebase_plan` + `apply_rebase_cmd` (interactive rebase: pick/reword/squash), drop commit; shared `rebuild_with_messages`; `is_pushed` |
-| `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
-| `remotes.rs` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
-| `sync.rs` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
-| `stash.rs` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
-| `terminal.rs` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
-| `watch.rs` | the `.git` watcher |
+The folders follow the frontend's `src/features/` (one folder per area of the UI; `src/api/` has one wrapper file per
+backend file). A folder's `mod.rs` holds what the area as a whole needs; the other files are its parts. Every submodule
+is `pub mod` and `lib.rs` registers commands by full path (`history::rebase::apply_rebase_cmd`): `generate_handler!` needs
+the module path to be visible from the crate root.
+
+| Folder / file | Frontend feature | Commands / role |
+| --- | --- | --- |
+| `repo/mod.rs` | `features/welcome`, `features/repo` | `open_repo`, recent repos (JSON in the app data dir) |
+| `repo/watch.rs` | `features/repo` | the `.git` watcher (`watch_repo`, `unwatch_repo`) |
+| `graph/mod.rs` | `features/graph` | `get_graph`: revwalk over all refs, lane layout computed in Rust, `on_head` flag per row |
+| `graph/reset.rs` | graph context menu | `get_reset_info` (what a reset would remove/add, pushed count, uncommitted files), `reset_to_commit` (soft/mixed/hard) |
+| `history/mod.rs` | graph context menu | shared by the rewrites below: `is_pushed`, `rewrite_plan`, `rebuild_with_messages`, `move_head_to`, `blocking` |
+| `history/rename.rs` | `features/rename` | `get_rename_info`, `rename_commit_message` (rewrites the commit and its descendants) |
+| `history/rebase.rs` | `features/rebase` | `get_rebase_plan`, `apply_rebase_cmd` (interactive rebase: pick/reword/squash/drop/reorder), `replay_group` |
+| `history/drop.rs` | graph context menu | `get_drop_info`, `drop_latest_commit` (drop one commit) |
+| `history/test_support.rs` | tests only | small repositories with real commits for the history tests |
+| `changes/mod.rs` | `features/changes` | status, stage/unstage, `discard_paths` (whole-file discard), `create_commit` (new or `amend`), `get_head_commit` |
+| `changes/hunks.rs` | diff view | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see Product decisions) |
+| `commit/mod.rs` | `features/commit` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
+| `sidebar/branches.rs` | `features/sidebar` | list, create+checkout, checkout, delete, rename (local) |
+| `sidebar/remotes.rs` | `features/sidebar` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
+| `sidebar/stash.rs` | `features/sidebar`, `features/changes` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
+| `toolbar/sync.rs` | `features/toolbar` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
+| `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
+
+Modules reach each other by full path (`crate::toolbar::sync::run_git`, `crate::changes::status_of`,
+`crate::sidebar::stash::save_stash`). Tests live in a `#[cfg(test)] mod tests` at the bottom of the file they test.
 
 ### Frontend (`src/`, `@/` = `src/`)
 
@@ -172,7 +184,7 @@ app rename so users keep their data. Don't change it casually.
 - **Rename commit** (graph context menu) only for commits on the current branch. Rebuilds the commit and
   every later commit with identical trees/authors/dates, then moves the branch; other branches keep the old
   history. Warns about rewritten descendants and pushed commits.
-- **Drop commit** (graph context menu, `history.rs` `drop_plan`/`drop_commit`) works for any commit on the checked-out
+- **Drop commit** (graph context menu, `history/drop.rs` `drop_plan`/`drop_commit`) works for any commit on the checked-out
   branch's own first-parent line when no merge commit lies between it and the tip, and the commit has a parent.
   The commits after it are re-created in memory with `cherrypick_commit` (3-way merge, original author, committer
   and message; empty results are kept, not silently dropped); a conflict aborts with the commit and files named
@@ -181,7 +193,7 @@ app rename so users keep their data. Don't change it casually.
   pushed counts, merge flag) warns about rewritten ids, pushed history (force push), merge commits, other refs
   keeping the old history and lost signatures. Errors use the native `showError` dialog. **Revert commit** (the
   non-rewriting alternative for pushed commits) is not built.
-- **Reset** (graph context menu, `reset.rs`): a *Reset to this commit* group whose submenu offers Soft / Mixed / Hard on any non-stash commit,
+- **Reset** (graph context menu, `graph/reset.rs`): a *Reset to this commit* group whose submenu offers Soft / Mixed / Hard on any non-stash commit,
   each behind a confirmation whose text is built by `features/repo/describeReset.ts` from `get_reset_info` (commits
   removed with the newest few listed, commits gained, pushed count, uncommitted file count, ancestor or jump to another
   line). It is plain `git2` `reset` (Soft/Mixed/Hard), also allowed on a detached HEAD, refused during a merge/rebase
@@ -227,7 +239,7 @@ app rename so users keep their data. Don't change it casually.
   heading row per hunk; only the *unstaged* view of a tracked, non-conflicted, non-binary file gets **Stage hunk** /
   **Discard hunk**, and the *staged* view gets **Unstage hunk** (`stage_hunk_cmd` / `discard_hunk_cmd` /
   `unstage_hunk_cmd`, which re-diff and refuse with a "changed since this diff
-  was shown" error when the fingerprint no longer matches). They do not build patches: `hunks.rs` rebuilds the
+  was shown" error when the fingerprint no longer matches). They do not build patches: `changes/hunks.rs` rebuilds the
   index blob (stage) or the file on disk (discard) line by line from the full-file diff using each line's raw bytes,
   so CRLF files and a missing final newline survive (discard re-inserts restored lines with the file's own EOL).
   Staging a deletion removes the index entry; discarding one checks the file out of the index. Unstaging rebuilds

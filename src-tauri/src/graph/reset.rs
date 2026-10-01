@@ -42,7 +42,7 @@ fn prepare<'r>(repo: &'r Repository, id: &str) -> Result<(Commit<'r>, Commit<'r>
     let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|_| "There are no commits yet".to_string())?;
     let oid = Oid::from_str(id).map_err(err)?;
     let target = repo.find_commit(oid).map_err(err)?;
-    if crate::stash::stash_index_of(repo, oid).is_some() {
+    if crate::sidebar::stash::stash_index_of(repo, oid).is_some() {
         return Err("A stash can't be used as a reset target".into());
     }
     Ok((head, target))
@@ -282,7 +282,7 @@ mod tests {
     fn stashes_and_empty_repositories_are_refused() {
         let (dir, mut repo, _a, _b, c) = history("refused");
         fs::write(dir.join("a.txt"), "stash me").unwrap();
-        let stash = crate::stash::save_stash(&mut repo, Some("wip")).unwrap();
+        let stash = crate::sidebar::stash::save_stash(&mut repo, Some("wip")).unwrap();
         assert!(reset_info(&repo, &stash.to_string()).unwrap_err().contains("stash"));
         assert!(reset_to(&repo, &stash.to_string(), "hard").unwrap_err().contains("stash"));
         assert_eq!(repo.head().unwrap().target(), Some(c), "nothing moved");

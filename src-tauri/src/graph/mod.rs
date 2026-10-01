@@ -1,3 +1,5 @@
+pub mod reset;
+
 use std::collections::{HashMap, HashSet};
 
 use git2::{Oid, Repository, Sort};
@@ -145,7 +147,7 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
     // parents (the saved index and the untracked files) are implementation details: not drawn.
     let mut stash_ids: HashSet<Oid> = HashSet::new();
     let mut stash_internal: HashSet<Oid> = HashSet::new();
-    for stash in crate::stash::list_stashes(&mut repo)? {
+    for stash in crate::sidebar::stash::list_stashes(&mut repo)? {
         let Ok(oid) = Oid::from_str(&stash.id) else { continue };
         if let Ok(commit) = repo.find_commit(oid) {
             stash_internal.extend(commit.parent_ids().skip(1));
@@ -417,7 +419,7 @@ mod tests {
         let b = commit(&repo, "b", &[a], Some("refs/heads/main"));
         repo.set_head("refs/heads/main").unwrap();
         std::fs::write(dir.join("u.txt"), "untracked").unwrap();
-        let stash = crate::stash::save_stash(&mut repo, Some("wip")).unwrap();
+        let stash = crate::sidebar::stash::save_stash(&mut repo, Some("wip")).unwrap();
 
         let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
         // Two commits plus one stash: the saved-index and untracked-files commits stay hidden.

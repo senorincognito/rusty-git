@@ -1,3 +1,5 @@
+pub mod hunks;
+
 use std::path::Path;
 
 use git2::build::CheckoutBuilder;

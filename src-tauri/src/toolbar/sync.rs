@@ -181,7 +181,7 @@ fn push(path: &str) -> Result<String, String> {
         return run_git(path, &["push"]);
     }
     // First push of a new branch: publish it to the target remote and start tracking it.
-    let remote = crate::remotes::target_remote(&repo).ok_or("No remotes configured for this repository")?;
+    let remote = crate::sidebar::remotes::target_remote(&repo).ok_or("No remotes configured for this repository")?;
     run_git(path, &["push", "--set-upstream", &remote, "HEAD"])
 }
 

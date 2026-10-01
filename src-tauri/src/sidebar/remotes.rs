@@ -138,7 +138,7 @@ fn delete_remote_branch_checked(
     if info.tracked_by_head.as_deref() == Some(name) {
         return Err("This is the upstream of the checked-out branch. Switch branches first.".into());
     }
-    crate::sync::run_git(repo_path, &["push", remote, "--delete", name])
+    crate::toolbar::sync::run_git(repo_path, &["push", remote, "--delete", name])
 }
 
 /// Renames `<remote>/<name>` on the server: pushes the same commit under the new name and deletes
@@ -152,7 +152,7 @@ fn rename_remote_branch_checked(
     name: &str,
     new_name: &str,
 ) -> Result<String, String> {
-    let new_name = crate::branches::validate_branch_name(new_name)?;
+    let new_name = crate::sidebar::branches::validate_branch_name(new_name)?;
     let info = remote_info(repo, remote)?.ok_or_else(|| format!("No remote named \"{remote}\""))?;
     if !info.branches.iter().any(|b| b == name) {
         return Err(format!("Remote branch \"{remote}/{name}\" not found. Fetch and try again."));
@@ -179,12 +179,12 @@ fn rename_remote_branch_checked(
     let lease = format!("--force-with-lease=refs/heads/{name}:{tip}");
     let create = format!("{tip}:refs/heads/{new_name}");
     let delete = format!(":refs/heads/{name}");
-    let output =
-        crate::sync::run_git(repo_path, &["push", "--atomic", &lease, remote, &create, &delete]).or_else(|e| {
+    let output = crate::toolbar::sync::run_git(repo_path, &["push", "--atomic", &lease, remote, &create, &delete])
+        .or_else(|e| {
             // Only for servers that can't do atomic pushes (a rejected lease also mentions "atomic",
             // and must NOT be retried: that would create the new name without removing the old one).
             if e.to_lowercase().contains("does not support --atomic") {
-                crate::sync::run_git(repo_path, &["push", &lease, remote, &create, &delete])
+                crate::toolbar::sync::run_git(repo_path, &["push", &lease, remote, &create, &delete])
             } else {
                 Err(e)
             }
@@ -443,7 +443,7 @@ mod tests {
     }
 
     fn git(dir: &std::path::Path, args: &[&str]) -> String {
-        crate::sync::run_git(dir.to_str().unwrap(), args).unwrap_or_else(|e| panic!("git {args:?}: {e}"))
+        crate::toolbar::sync::run_git(dir.to_str().unwrap(), args).unwrap_or_else(|e| panic!("git {args:?}: {e}"))
     }
 
     #[test]
