@@ -349,6 +349,9 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
   was written: if a job fails, fix the workflow from the log (Linux needs the webkit2gtk/xdo/appindicator packages just to compile).
   ESLint (`eslint.config.js`) enables only `rules-of-hooks` and `exhaustive-deps` from the react-hooks plugin: its React Compiler
   rules flag deliberate patterns (state reset in effects on `path` change, ref sync during render).
+  The Linux test job runs `--test-threads=1` and every job has a timeout: the first CI run hung on Ubuntu after the
+  `terminal` chunker test (suspected fork-in-a-multithreaded-process deadlock of the PTY test, unconfirmed). If it still
+  hangs, the last `test x ...` line without a result names the culprit.
 - Build with the scripts in `scripts/`: `build-release.cmd` (Windows launcher, double-clickable; runs the
   `.ps1` with `-ExecutionPolicy Bypass` because the default policy blocks unsigned .ps1 files) and
   `build-release.sh` (macOS/Linux/Git Bash; tested here only under Git Bash on Windows). Both check the
