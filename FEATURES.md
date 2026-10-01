@@ -121,6 +121,8 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   - **reword** opens a popup with the commit message and **Cancel** / **Update message** (Ctrl/Cmd+Enter). The new
     first line shows in the list, a blue margin marks the commit, and **Edit message** opens the popup again. Choosing
     *pick* again drops the new message.
+- Right-click a commit in the list for the same actions as shortcuts: **Reword commit**, **Squash commit** and **Drop commit**
+  (unavailable ones are greyed out with the reason).
 - **Start rebase** applies everything at once; **Cancel rebase** (top or bottom, or Esc) leaves without changes.
 - Reworded and squashed commits get you as committer; every commit after the oldest change is rebuilt
   with the same content, author and date (new ids). Files, the staging area and other branches are not touched. The

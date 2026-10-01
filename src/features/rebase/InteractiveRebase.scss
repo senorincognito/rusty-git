@@ -69,6 +69,11 @@
     background: $hover-tint;
   }
 
+  // The row a context menu is open on.
+  &.ctx {
+    background: $press-tint;
+  }
+
   // A commit that will change is marked in the margin.
   &.reword {
     border-left-color: $accent;

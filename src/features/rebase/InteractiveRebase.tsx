@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { applyRebase, getRebasePlan, type RebaseCommit, type RebasePlan, type RebaseStep } from "@/api/history";
+import ContextMenu from "@/components/ContextMenu";
 import Modal from "@/components/Modal";
 import { fill, t } from "@/i18n";
 import "./InteractiveRebase.scss";
@@ -38,6 +39,9 @@ export default function InteractiveRebase({
   const [dropped, setDropped] = useState<Record<string, true>>({});
   // The commit whose message is being edited in the popup.
   const [editing, setEditing] = useState<RebaseCommit | null>(null);
+  // The row a right-click menu is open on.
+  const [menu, setMenu] = useState<{ x: number; y: number; index: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -48,6 +52,7 @@ export default function InteractiveRebase({
     setSquashed({});
     setDropped({});
     setEditing(null);
+    setMenu(null);
     setError(null);
     getRebasePlan(path, base.id)
       .then((p) => !stale && setPlan(p))
@@ -97,6 +102,23 @@ export default function InteractiveRebase({
   const pushedRewritten = rewritten.filter((c) => c.pushed).length;
   const changeCount = rewordCount + squashCount + dropCount;
   const canStart = !busy && plan !== null && changeCount > 0;
+
+  // Why an action isn't available for the commit at `index` (null: it is). Shared by the select and the menu.
+  const squashBlockedFor = (index: number) => {
+    const c = commits[index];
+    // A squash needs a commit before it in this rebase, and a merge commit can't be melded away.
+    const olderTarget = commits.slice(index + 1).find((o) => !(o.id in squashed));
+    return index === commits.length - 1
+      ? t.rebase.squashOldest
+      : c.isMerge
+        ? t.rebase.squashMerge
+        : olderTarget && olderTarget.id in dropped
+          ? t.rebase.squashIntoDropped
+          : null;
+  };
+  // A commit that others are squashed into can't be dropped (the commit just above it is squashed).
+  const dropBlockedFor = (index: number) =>
+    index > 0 && commits[index - 1].id in squashed ? t.rebase.dropSquashed : null;
 
   const setAction = (c: RebaseCommit, action: Action) => {
     if (action === "reword") {
@@ -164,20 +186,17 @@ export default function InteractiveRebase({
             const action: Action =
               c.id in dropped ? "drop" : c.id in squashed ? "squash" : c.id in reworded ? "reword" : "pick";
             const message = reworded[c.id] ?? c.message;
-            // A squash needs a commit before it in this rebase, and a merge commit can't be melded away.
-            const olderTarget = commits.slice(index + 1).find((o) => !(o.id in squashed));
-            const squashBlocked =
-              index === commits.length - 1
-                ? t.rebase.squashOldest
-                : c.isMerge
-                  ? t.rebase.squashMerge
-                  : olderTarget && olderTarget.id in dropped
-                    ? t.rebase.squashIntoDropped
-                    : null;
-            // A commit that others are squashed into can't be dropped (the commit just above it is squashed).
-            const dropBlocked = index > 0 && commits[index - 1].id in squashed ? t.rebase.dropSquashed : null;
+            const squashBlocked = squashBlockedFor(index);
+            const dropBlocked = dropBlockedFor(index);
             return (
-              <li key={c.id} className={"rebaserow " + action}>
+              <li
+                key={c.id}
+                className={"rebaserow " + action + (menu?.index === index ? " ctx" : "")}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (!busy) setMenu({ x: e.clientX, y: e.clientY, index });
+                }}
+              >
                 <select
                   className="rebase-action"
                   value={action}
@@ -258,6 +277,30 @@ export default function InteractiveRebase({
           {busy ? t.rebase.starting : t.rebase.start}
         </button>
       </footer>
+
+      {menu && commits[menu.index] && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={[
+            { label: t.rebase.menuReword, title: t.rebase.rewordHint, onClick: () => setAction(commits[menu.index], "reword") },
+            {
+              label: t.rebase.menuSquash,
+              disabled: squashBlockedFor(menu.index) !== null,
+              title: squashBlockedFor(menu.index) ?? t.rebase.squashHint,
+              onClick: () => setAction(commits[menu.index], "squash"),
+            },
+            {
+              label: t.rebase.menuDrop,
+              danger: true,
+              disabled: dropBlockedFor(menu.index) !== null,
+              title: dropBlockedFor(menu.index) ?? t.rebase.dropHint,
+              onClick: () => setAction(commits[menu.index], "drop"),
+            },
+          ]}
+        />
+      )}
 
       {editing && (
         <RewordDialog
