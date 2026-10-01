@@ -5,6 +5,7 @@ import {
   getFileDiff,
   getWorkingDiff,
   stageHunk,
+  unstageHunk,
   type DiffLine,
   type FileDiff as FileDiffData,
 } from "@/api/diff";
@@ -30,8 +31,9 @@ type Row = { type: "line"; line: DiffLine } | { type: "hunk"; block: number; add
 
 /**
  * The centre view for one file: its content with the added and removed lines marked in place
- * (or just the changed hunks). Every run of changed lines is a hunk with a heading row; for the
- * unstaged changes of a tracked file the heading has "Stage hunk" and "Discard hunk" buttons.
+ * (or just the changed hunks). Every run of changed lines is a hunk with a heading row; on the
+ * unstaged changes of a tracked file it has "Stage hunk" and "Discard hunk" buttons, on the staged
+ * changes an "Unstage hunk" button.
  * Rendered in a virtual list so long files stay fast. Working-tree diffs reload when the repo
  * changes or the window regains focus, keeping the scroll position.
  */
@@ -151,14 +153,11 @@ export default function FileDiff({
     return out;
   }, [diff]);
 
-  // Only tracked files that are not mid-conflict can be changed hunk by hunk.
-  const canAct =
-    source.kind === "unstaged" &&
-    file.status !== "new" &&
-    file.status !== "conflicted" &&
-    diff !== null &&
-    !diff.binary &&
-    !diff.truncated;
+  // Hunks can be moved only in text diffs that are complete and not mid-conflict. Untracked files
+  // (unstaged "new") have no index version to build from; stage them whole from the list.
+  const hunkable = diff !== null && !diff.binary && !diff.truncated && file.status !== "conflicted";
+  const canStage = hunkable && source.kind === "unstaged" && file.status !== "new";
+  const canUnstage = hunkable && source.kind === "staged";
 
   const act = async (op: () => Promise<void>) => {
     setActing(true);
@@ -176,6 +175,10 @@ export default function FileDiff({
 
   const stage = (block: number) => {
     if (diff) act(() => stageHunk(path, file.path, block, diff.blocks[block]));
+  };
+
+  const unstage = (block: number) => {
+    if (diff) act(() => unstageHunk(path, file.path, block, diff.blocks[block]));
   };
 
   const discard = async (block: number, adds: number, dels: number) => {
@@ -255,7 +258,17 @@ export default function FileDiff({
                         Hunk {row.block + 1} of {hunkCount} · <span className="add">+{row.adds}</span>{" "}
                         <span className="del">-{row.dels}</span>
                       </span>
-                      {canAct && (
+                      {canUnstage && (
+                        <button
+                          className="bk-btn"
+                          disabled={acting}
+                          onClick={() => unstage(row.block)}
+                          title="Take this hunk back out of the staging area (the file on disk is not changed)"
+                        >
+                          Unstage hunk
+                        </button>
+                      )}
+                      {canStage && (
                         <>
                           <button
                             className="bk-btn"

@@ -1,4 +1,4 @@
-//! Staging and discarding a single hunk of a file's uncommitted changes.
+//! Staging, unstaging and discarding a single hunk of a file's uncommitted changes.
 //!
 //! A hunk is a contiguous run of added/removed lines (see `DiffLine::block`). Instead of building
 //! and applying patches, the new contents are rebuilt line by line from the full-file diff:
@@ -23,10 +23,17 @@ fn workdir(repo: &Repository) -> Result<PathBuf, String> {
     repo.workdir().map(Path::to_path_buf).ok_or_else(|| "The repository has no working directory".to_string())
 }
 
-/// The unstaged diff of `path` with its exact line bytes, after checking that hunk `block` is
-/// still the one the caller saw (`id`) and that the file can be changed hunk by hunk.
-fn locate(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(FileDiff, Vec<Vec<u8>>), String> {
-    let (diff, raw) = working_diff_raw(repo, path, false, true)?;
+/// The unstaged (or, with `staged`, the staged) diff of `path` with its exact line bytes, after
+/// checking that hunk `block` is still the one the caller saw (`id`) and that the file can be
+/// changed hunk by hunk.
+fn locate(
+    repo: &Repository,
+    path: &str,
+    staged: bool,
+    block: usize,
+    id: &str,
+) -> Result<(FileDiff, Vec<Vec<u8>>), String> {
+    let (diff, raw) = working_diff_raw(repo, path, staged, true)?;
     if diff.binary {
         return Err("Binary files can't be changed hunk by hunk".into());
     }
@@ -36,7 +43,8 @@ fn locate(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(File
     if diff.blocks.get(block).map(String::as_str) != Some(id) {
         return Err(STALE.into());
     }
-    if repo.index().map_err(err)?.get_path(Path::new(path), 0).is_none() {
+    // An untracked file has no index version to build from (a staged new file is fine to unstage).
+    if !staged && repo.index().map_err(err)?.get_path(Path::new(path), 0).is_none() {
         return Err("This file is not tracked yet, so it can't be changed hunk by hunk. Stage the whole file instead.".into());
     }
     Ok((diff, raw))
@@ -45,7 +53,7 @@ fn locate(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(File
 /// Puts hunk `block` of the file's unstaged changes into the index (the staging area), leaving
 /// the file on disk and the other hunks untouched.
 pub(crate) fn stage_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
-    let (diff, raw) = locate(repo, path, block, id)?;
+    let (diff, raw) = locate(repo, path, false, block, id)?;
     let rel = Path::new(path);
     let mut index = repo.index().map_err(err)?;
     let existing = index.get_path(rel, 0).ok_or(STALE)?;
@@ -79,6 +87,57 @@ pub(crate) fn stage_hunk(repo: &Repository, path: &str, block: usize, id: &str) 
             flags: 0,
             flags_extended: 0,
             path: existing.path.clone(),
+        };
+        index.add_frombuffer(&entry, &out).map_err(err)?;
+    }
+    index.write().map_err(err)
+}
+
+/// Takes hunk `block` of the file's staged changes back out of the index: the index keeps the
+/// other staged hunks and gets HEAD's lines back for this one. The file on disk is not touched.
+pub(crate) fn unstage_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
+    let (diff, raw) = locate(repo, path, true, block, id)?;
+    let rel = Path::new(path);
+    let mut index = repo.index().map_err(err)?;
+    let existing = index.get_path(rel, 0);
+    // The file as HEAD has it; None for a file that is new (or on a branch without commits).
+    let head_mode = repo
+        .head()
+        .ok()
+        .and_then(|h| h.peel_to_tree().ok())
+        .and_then(|t| t.get_path(rel).ok())
+        .map(|e| e.filemode() as u32);
+
+    // Staged result: the staged lines, but this hunk reverted to what HEAD has.
+    let mut out: Vec<u8> = Vec::new();
+    for (line, bytes) in diff.lines.iter().zip(&raw) {
+        let mine = line.block == Some(block);
+        match line.kind {
+            "ctx" => out.extend_from_slice(bytes),
+            "add" if !mine => out.extend_from_slice(bytes),
+            "del" if mine => out.extend_from_slice(bytes),
+            _ => {}
+        }
+    }
+
+    if out.is_empty() && head_mode.is_none() {
+        // A newly added file: unstaging its (only) hunk removes it from the index again.
+        index.remove_path(rel).map_err(err)?;
+    } else {
+        let mode = existing.as_ref().map(|e| e.mode).or(head_mode).ok_or(STALE)?;
+        let entry = IndexEntry {
+            ctime: IndexTime::new(0, 0),
+            mtime: IndexTime::new(0, 0),
+            dev: 0,
+            ino: 0,
+            mode,
+            uid: 0,
+            gid: 0,
+            file_size: out.len() as u32,
+            id: Oid::ZERO_SHA1,
+            flags: 0,
+            flags_extended: 0,
+            path: existing.map_or_else(|| path.as_bytes().to_vec(), |e| e.path),
         };
         index.add_frombuffer(&entry, &out).map_err(err)?;
     }
@@ -121,7 +180,7 @@ fn with_eol(line: &[u8], crlf: bool) -> Vec<u8> {
 /// Throws away hunk `block` of the file's unstaged changes: the file on disk gets the index version
 /// of those lines back, the other changes stay. Cannot be undone.
 pub(crate) fn discard_hunk(repo: &Repository, path: &str, block: usize, id: &str) -> Result<(), String> {
-    let (diff, raw) = locate(repo, path, block, id)?;
+    let (diff, raw) = locate(repo, path, false, block, id)?;
     let rel = Path::new(path);
     let full = workdir(repo)?.join(rel);
 
@@ -176,6 +235,12 @@ async fn blocking(
 #[tauri::command]
 pub async fn stage_hunk_cmd(path: String, file: String, block: usize, block_id: String) -> Result<(), String> {
     blocking(path, move |r| stage_hunk(r, &file, block, &block_id)).await
+}
+
+/// Takes one hunk of a file's staged changes out of the staging area again.
+#[tauri::command]
+pub async fn unstage_hunk_cmd(path: String, file: String, block: usize, block_id: String) -> Result<(), String> {
+    blocking(path, move |r| unstage_hunk(r, &file, block, &block_id)).await
 }
 
 /// Discards one hunk of a file's unstaged changes (not undoable).
@@ -361,6 +426,105 @@ mod tests {
         // Binary files are refused.
         fs::write(dir.join("bin.dat"), [9u8, 0, 0, 0, 1]).unwrap();
         assert!(stage_hunk(&repo, "bin.dat", 0, "x").unwrap_err().contains("Binary"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unstaging_single_hunks() {
+        let (dir, repo) = setup("unstage");
+        fs::write(dir.join("a.txt"), text(&lines(30))).unwrap();
+        commit_paths(&repo, &["a.txt"], "base");
+
+        // Edit in four places and stage the whole file.
+        let mut v = lines(30);
+        v[2] = "line 3 CHANGED".into();
+        v[11] = "line 12 CHANGED".into();
+        v.remove(20);
+        v.push("line 31".into());
+        fs::write(dir.join("a.txt"), text(&v)).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("a.txt")).unwrap();
+        index.write().unwrap();
+        let d = staged(&repo, "a.txt");
+        assert_eq!(d.blocks.len(), 4);
+        assert!(unstage_hunk(&repo, "a.txt", 1, "0000000000000000").unwrap_err().contains("changed since"));
+
+        // Unstage hunk 1 (the line-12 edit): the index loses just that one, the file on disk keeps it.
+        unstage_hunk(&repo, "a.txt", 1, &d.blocks[1]).unwrap();
+        let mut expected = v.clone();
+        expected[11] = "line 12".into();
+        assert_eq!(index_text(&repo, "a.txt"), text(&expected));
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), text(&v));
+        assert_eq!((staged(&repo, "a.txt").blocks.len(), unstaged(&repo, "a.txt").blocks.len()), (3, 1));
+
+        // Unstage the rest one by one: the index ends up equal to HEAD again.
+        for _ in 0..3 {
+            let d = staged(&repo, "a.txt");
+            unstage_hunk(&repo, "a.txt", 0, &d.blocks[0]).unwrap();
+        }
+        assert_eq!(index_text(&repo, "a.txt"), text(&lines(30)));
+        assert!(staged(&repo, "a.txt").blocks.is_empty());
+        assert_eq!(unstaged(&repo, "a.txt").blocks.len(), 4, "everything is back in the working changes");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unstaging_new_deleted_and_first_commit_files() {
+        let (dir, repo) = setup("unstage-special");
+
+        // On a branch without commits: a staged file unstages to nothing.
+        fs::write(dir.join("first.txt"), "one\ntwo\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("first.txt")).unwrap();
+        index.write().unwrap();
+        let d = staged(&repo, "first.txt");
+        assert_eq!(d.blocks.len(), 1);
+        unstage_hunk(&repo, "first.txt", 0, &d.blocks[0]).unwrap();
+        assert!(repo.index().unwrap().get_path(Path::new("first.txt"), 0).is_none());
+
+        // Normal history from here on.
+        fs::write(dir.join("keep.txt"), text(&lines(5))).unwrap();
+        fs::write(dir.join("eof.txt"), "a\nb").unwrap(); // no final newline
+        commit_paths(&repo, &["keep.txt", "eof.txt"], "base");
+
+        // A newly added file (not in HEAD) is removed from the index again.
+        fs::write(dir.join("new.txt"), "x\ny\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("new.txt")).unwrap();
+        index.write().unwrap();
+        let d = staged(&repo, "new.txt");
+        unstage_hunk(&repo, "new.txt", 0, &d.blocks[0]).unwrap();
+        assert!(repo.index().unwrap().get_path(Path::new("new.txt"), 0).is_none());
+        assert!(dir.join("new.txt").exists(), "the file itself stays");
+
+        // A staged deletion comes back into the index.
+        fs::remove_file(dir.join("keep.txt")).unwrap();
+        let mut index = repo.index().unwrap();
+        index.remove_path(Path::new("keep.txt")).unwrap();
+        index.write().unwrap();
+        let d = staged(&repo, "keep.txt");
+        assert_eq!(d.blocks.len(), 1);
+        unstage_hunk(&repo, "keep.txt", 0, &d.blocks[0]).unwrap();
+        assert_eq!(index_text(&repo, "keep.txt"), text(&lines(5)));
+        assert!(!dir.join("keep.txt").exists(), "unstaging never touches the file on disk");
+
+        // The missing final newline of HEAD's version is restored exactly.
+        fs::write(dir.join("eof.txt"), "a\nb\nc\n").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("eof.txt")).unwrap();
+        index.write().unwrap();
+        let d = staged(&repo, "eof.txt");
+        unstage_hunk(&repo, "eof.txt", 0, &d.blocks[0]).unwrap();
+        assert_eq!(index_text(&repo, "eof.txt"), "a\nb");
+
+        // Binary files are refused.
+        fs::write(dir.join("bin.dat"), [0u8, 1, 2]).unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("bin.dat")).unwrap();
+        index.write().unwrap();
+        assert!(unstage_hunk(&repo, "bin.dat", 0, "x").unwrap_err().contains("Binary"));
 
         let _ = fs::remove_dir_all(&dir);
     }

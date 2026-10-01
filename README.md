@@ -63,7 +63,9 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   and keeps its scroll position.
 - Every run of changed lines is a **hunk** with its own heading ("Hunk 2 of 5 · +3 -1"), in all diff views. On
   the *unstaged* diff of a tracked file each heading has **Stage hunk** (puts just that hunk into the staging
-  area) and **Discard hunk** (removes it from the file after a confirmation; cannot be undone). Line endings,
+  area) and **Discard hunk** (removes it from the file after a confirmation; cannot be undone); on the
+  *staged* diff each heading has **Unstage hunk** (takes just that hunk back out of the staging area, the
+  file on disk is untouched; a newly added file is removed from the index, a staged deletion comes back). Line endings,
   including CRLF files and a missing final newline, are preserved, and a hunk whose file changed since the diff
   was shown is refused instead of applied to the wrong lines. New (untracked) files and binary files have no
   hunk buttons: stage the whole file from the list.

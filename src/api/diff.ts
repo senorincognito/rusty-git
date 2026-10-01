@@ -50,3 +50,7 @@ export const stageHunk = (path: string, file: string, block: number, blockId: st
 /** Throws away one hunk of a file's unstaged changes. Cannot be undone. */
 export const discardHunk = (path: string, file: string, block: number, blockId: string) =>
   invoke<void>("discard_hunk_cmd", { path, file, block, blockId });
+
+/** Takes one hunk of a file's staged changes back out of the staging area. */
+export const unstageHunk = (path: string, file: string, block: number, blockId: string) =>
+  invoke<void>("unstage_hunk_cmd", { path, file, block, blockId });

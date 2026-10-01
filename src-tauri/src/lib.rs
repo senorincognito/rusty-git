@@ -37,6 +37,7 @@ pub fn run() {
             history::get_rename_info,
             hunks::discard_hunk_cmd,
             hunks::stage_hunk_cmd,
+            hunks::unstage_hunk_cmd,
             history::rename_commit_message,
             repo::open_repo,
             repo::get_recent_repos,
