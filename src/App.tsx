@@ -9,6 +9,7 @@ import {
   watchRepo,
   type RepoInfo,
 } from "./git";
+import BranchButton from "./BranchButton";
 import Changes from "./Changes";
 import Graph from "./Graph";
 import Sidebar from "./Sidebar";
@@ -94,6 +95,7 @@ function App() {
             {repo.detached ? "detached @ " : ""}
             {repo.head ?? "(no commits yet)"}
           </span>
+          <BranchButton path={repo.path} onCreated={onCommitted} />
           <SyncBar path={repo.path} refreshKey={graphKey} />
           <button
             className={"syncbtn termtoggle" + (terminalOpen ? " active" : "")}
@@ -104,7 +106,7 @@ function App() {
           </button>
         </header>
         <div className="body">
-          <Sidebar path={repo.path} refreshKey={graphKey} onChanged={() => setGraphKey((k) => k + 1)} />
+          <Sidebar path={repo.path} refreshKey={graphKey} onChanged={onCommitted} />
           <Graph path={repo.path} refreshKey={graphKey} />
           <Changes path={repo.path} refreshKey={graphKey} onCommitted={onCommitted} />
         </div>
