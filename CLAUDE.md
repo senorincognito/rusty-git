@@ -14,13 +14,16 @@ duplicating them, and move finished items off "Not implemented yet".
 ```sh
 npm install
 npm run tauri dev                                    # run the app (hot reload; a Rust change restarts it)
+npm run lint                                         # ESLint (src/ only)
 npx tsc --noEmit                                     # typecheck the frontend
 npx vite build                                       # bundle (also proves the "@/" alias resolves)
 cargo test --lib --manifest-path src-tauri/Cargo.toml   # all backend tests (needs system `git` on PATH)
 cargo check --manifest-path src-tauri/Cargo.toml     # keep it warning-free
+cargo fmt --manifest-path src-tauri/Cargo.toml       # rustfmt (src-tauri/rustfmt.toml: width 120)
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings   # keep it clean
 ```
 
-Before calling work done: `cargo test --lib`, `npx tsc --noEmit` and `npx vite build` (which also compiles all the
+Before calling work done: `cargo test --lib`, `cargo fmt --check`, `cargo clippy`, `npm run lint`, `npx tsc --noEmit` and `npx vite build` (which also compiles all the
 SCSS: a malformed rule is a build error). There is no frontend test runner and the UI can't be driven from here, so
 say plainly that UI behaviour is untested in the running app.
 

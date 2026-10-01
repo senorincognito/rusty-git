@@ -65,7 +65,7 @@ export function useAutoFetch({
       s.inFlight = true;
       setState("fetching");
       let status: string;
-      let message = "";
+      let message: string;
       try {
         ({ status, message } = await autoFetch(path));
       } catch (e) {
