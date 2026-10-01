@@ -101,6 +101,18 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   panel warns when later commits are rewritten and when the commit is already pushed (a
   force push is then needed).
 
+## Interactive rebase
+- Right-click a commit of the current branch and choose **Interactive rebase…**. The right panel lists every commit after
+  it (newest first, like `git rebase -i <commit>`; the commit you clicked is the base and stays as it is), each with its
+  message in an editor, author, date and *pushed* / *merge* tags.
+- For now the only action is **rewording**: change as many messages as you like (a blue margin marks them, *Undo* puts one
+  back), then **Reword N commits** (or Ctrl/Cmd+Enter). Esc or Cancel closes it without changes.
+- The changed commits get the new messages and you as committer; every commit after the oldest changed one is rebuilt with
+  the same content, author and date (new ids). Files, the staging area and other branches are not touched. The panel says
+  how many extra commits are rewritten and warns when any of them is already pushed (a force push is then needed).
+- Only the branch's own line of history is offered (not commits that came in through a merge), up to 500 commits. If the
+  branch moved since the panel opened (a commit, a pull), applying is refused: close it and start again.
+
 ## Dropping a commit
 - Right-click a commit on the current branch and choose **Drop commit** (greyed out, with a tooltip, on other
   branches' commits, stashes and the first commit). After a confirmation the commit disappears from the branch

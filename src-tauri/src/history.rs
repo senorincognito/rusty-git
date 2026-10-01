@@ -109,9 +109,24 @@ fn rename_commit(repo: &Repository, id: &str, message: &str) -> Result<Oid, Stri
         return Err("The message is unchanged".into());
     }
 
+    let edits = HashMap::from([(target_oid, message)]);
+    let rebuilt = rebuild_with_messages(repo, &target, &edits, &format!("rename commit {}", &id[..7.min(id.len())]))?;
+    Ok(rebuilt[&target_oid])
+}
+
+/// Rebuilds `oldest` and every later commit on the way to HEAD with the same trees, authors and dates,
+/// giving the commits in `edits` their new message (and the current user as committer, like
+/// `--amend`), then moves the branch (or a detached HEAD) to the new tip. Files and index are
+/// untouched because no tree changes. Returns old id -> new id for every rebuilt commit.
+fn rebuild_with_messages(
+    repo: &Repository,
+    oldest: &Commit,
+    edits: &HashMap<Oid, String>,
+    note: &str,
+) -> Result<HashMap<Oid, Oid>, String> {
     let old_head = head_oid(repo).ok_or("There are no commits yet")?;
     let mut rebuilt: HashMap<Oid, Oid> = HashMap::new();
-    for oid in rewrite_plan(repo, &target)? {
+    for oid in rewrite_plan(repo, oldest)? {
         let c = repo.find_commit(oid).map_err(err)?;
         let parents = c
             .parent_ids()
@@ -119,12 +134,10 @@ fn rename_commit(repo: &Repository, id: &str, message: &str) -> Result<Oid, Stri
             .collect::<Result<Vec<_>, _>>()?;
         let parent_refs: Vec<&Commit> = parents.iter().collect();
 
-        let (text, committer) = if oid == target_oid {
-            // Like --amend: the renamer becomes the committer (falling back to the old one).
-            let who = repo.signature().unwrap_or_else(|_| c.committer().to_owned());
-            (message.clone(), who)
-        } else {
-            (String::from_utf8_lossy(c.message_raw_bytes()).into_owned(), c.committer().to_owned())
+        let (text, committer) = match edits.get(&oid) {
+            // The editor becomes the committer (falling back to the old one).
+            Some(m) => (m.clone(), repo.signature().unwrap_or_else(|_| c.committer().to_owned())),
+            None => (String::from_utf8_lossy(c.message_raw_bytes()).into_owned(), c.committer().to_owned()),
         };
         let new =
             repo.commit(None, &c.author(), &committer, &text, &c.tree().map_err(err)?, &parent_refs).map_err(err)?;
@@ -133,14 +146,120 @@ fn rename_commit(repo: &Repository, id: &str, message: &str) -> Result<Oid, Stri
 
     let new_head = rebuilt[&old_head];
     let head = repo.head().map_err(err)?;
-    let note = format!("rename commit {}", &id[..7.min(id.len())]);
     match (head.is_branch(), head.name()) {
         (true, Ok(refname)) => {
-            repo.reference(refname, new_head, true, &note).map_err(err)?;
+            repo.reference(refname, new_head, true, note).map_err(err)?;
         }
         _ => repo.set_head_detached(new_head).map_err(err)?,
     }
-    Ok(rebuilt[&target_oid])
+    Ok(rebuilt)
+}
+
+/// Above this many commits the rebase editor would be unwieldy; pick a later base instead.
+const MAX_REBASE_COMMITS: usize = 500;
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RebaseCommit {
+    pub id: String,
+    pub short_id: String,
+    /// Full message, to pre-fill the editor.
+    pub message: String,
+    pub author: String,
+    /// Unix seconds.
+    pub time: i64,
+    /// Already on the upstream: changing it rewrites published history.
+    pub pushed: bool,
+    pub is_merge: bool,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RebasePlan {
+    /// HEAD when the plan was made; applying refuses if the branch moved since.
+    pub head_id: String,
+    /// The commits after the base on the current branch, newest first.
+    pub commits: Vec<RebaseCommit>,
+}
+
+/// The commits an interactive rebase onto `base` covers: every commit after it on the current
+/// branch's own (first-parent) line of history, newest first. `base` itself is not included, like
+/// `git rebase -i <base>`.
+fn rebase_plan(repo: &Repository, base_id: &str) -> Result<RebasePlan, String> {
+    let base = Oid::from_str(base_id).map_err(err)?;
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|_| "There are no commits yet".to_string())?;
+    let mut commits = Vec::new();
+    let mut cursor = head.clone();
+    while cursor.id() != base {
+        if commits.len() == MAX_REBASE_COMMITS {
+            return Err(format!(
+                "More than {MAX_REBASE_COMMITS} commits follow this one; start the rebase from a later commit"
+            ));
+        }
+        let id = cursor.id().to_string();
+        commits.push(RebaseCommit {
+            short_id: id[..7].to_string(),
+            id,
+            message: String::from_utf8_lossy(cursor.message_raw_bytes()).trim_end().to_string(),
+            author: cursor.author().name().unwrap_or("").to_string(),
+            time: cursor.time().seconds(),
+            pushed: is_pushed(repo, cursor.id()),
+            is_merge: cursor.parent_count() > 1,
+        });
+        cursor = cursor.parent(0).map_err(|_| {
+            "Only commits on the current branch's own line of history can start an interactive rebase".to_string()
+        })?;
+    }
+    if commits.is_empty() {
+        return Err("There are no commits after this one on the current branch".into());
+    }
+    Ok(RebasePlan { head_id: head.id().to_string(), commits })
+}
+
+#[derive(serde::Deserialize, Debug)]
+pub struct MessageEdit {
+    pub id: String,
+    pub message: String,
+}
+
+/// Applies an interactive rebase that only rewords: each commit in `edits` gets its new message, and
+/// the commits after the oldest changed one are rebuilt (see [`rebuild_with_messages`]). Unchanged
+/// entries are ignored. Refuses if HEAD is no longer `head_id`, so a plan shown earlier can't be
+/// applied to a branch that moved meanwhile.
+fn reword_commits(repo: &Repository, base_id: &str, head_id: &str, edits: &[MessageEdit]) -> Result<usize, String> {
+    if repo.state() != RepositoryState::Clean {
+        return Err("Finish the merge, rebase or other operation in progress first".into());
+    }
+    let plan = rebase_plan(repo, base_id)?;
+    if plan.head_id != head_id {
+        return Err("The branch has changed since the rebase was opened. Close it and start again.".into());
+    }
+
+    let mut changed: HashMap<Oid, String> = HashMap::new();
+    for e in edits {
+        let current = plan
+            .commits
+            .iter()
+            .find(|c| c.id == e.id)
+            .ok_or_else(|| format!("Commit {} is not part of this rebase", &e.id[..7.min(e.id.len())]))?;
+        let message = git2::message_prettify(&e.message, None).map_err(err)?;
+        if message.trim().is_empty() {
+            return Err(format!("The message of {} is empty", current.short_id));
+        }
+        if message.trim() != current.message.trim() {
+            changed.insert(Oid::from_str(&e.id).map_err(err)?, message);
+        }
+    }
+    if changed.is_empty() {
+        return Err("No commit message was changed".into());
+    }
+
+    // The plan is newest first: the last changed entry is the oldest commit to rebuild from.
+    let oldest = plan.commits.iter().rev().find(|c| changed.contains_key(&Oid::from_str(&c.id).unwrap())).unwrap();
+    let oldest = repo.find_commit(Oid::from_str(&oldest.id).map_err(err)?).map_err(err)?;
+    let note = format!("interactive rebase: reword {} commit(s)", changed.len());
+    rebuild_with_messages(repo, &oldest, &changed, &note)?;
+    Ok(changed.len())
 }
 
 /// What dropping a commit involves, after checking that it is possible: the commit, its first
@@ -256,6 +375,23 @@ async fn blocking<T: Send + 'static>(
     tauri::async_runtime::spawn_blocking(move || f(&Repository::discover(&path).map_err(err)?))
         .await
         .map_err(|e| e.to_string())?
+}
+
+/// The commits an interactive rebase onto `id` would cover (newest first).
+#[tauri::command]
+pub async fn get_rebase_plan(path: String, id: String) -> Result<RebasePlan, String> {
+    blocking(path, move |r| rebase_plan(r, &id)).await
+}
+
+/// Rewords several commits at once (an interactive rebase limited to "reword"). Returns how many changed.
+#[tauri::command]
+pub async fn reword_commits_cmd(
+    path: String,
+    base_id: String,
+    head_id: String,
+    edits: Vec<MessageEdit>,
+) -> Result<usize, String> {
+    blocking(path, move |r| reword_commits(r, &base_id, &head_id, &edits)).await
 }
 
 /// What the rename dialog needs: current message and the consequences of renaming.
@@ -422,6 +558,63 @@ mod tests {
         let mut walk = repo.revwalk().unwrap();
         walk.push_head().unwrap();
         walk.map(|o| repo.find_commit(o.unwrap()).unwrap().summary().unwrap().unwrap().to_string()).collect()
+    }
+
+    #[test]
+    fn interactive_rebase_rewords_several_commits() {
+        let (dir, repo) = new_repo("reword");
+        let base = commit_file(&repo, &dir, "a.txt", "1", "base");
+        let b = commit_file(&repo, &dir, "a.txt", "2", "b");
+        let c = commit_file(&repo, &dir, "a.txt", "3", "c");
+        let d = commit_file(&repo, &dir, "a.txt", "4", "d");
+        repo.config().unwrap().set_str("user.name", "Editor").unwrap();
+        repo.config().unwrap().set_str("user.email", "e@example.com").unwrap();
+
+        // The plan covers the commits after the base, newest first; the base itself is not part of it.
+        let plan = rebase_plan(&repo, &base.to_string()).unwrap();
+        let ids: Vec<String> = plan.commits.iter().map(|c| c.id.clone()).collect();
+        assert_eq!(ids, [d.to_string(), c.to_string(), b.to_string()]);
+        assert!(rebase_plan(&repo, &d.to_string()).unwrap_err().contains("no commits after"));
+
+        let edit = |id: Oid, m: &str| MessageEdit { id: id.to_string(), message: m.into() };
+        let head = plan.head_id.clone();
+        let bs = base.to_string();
+        // Refusals: nothing changed, an empty message, a commit outside the plan, a stale plan.
+        assert!(reword_commits(&repo, &bs, &head, &[edit(c, "c")]).unwrap_err().contains("No commit message"));
+        assert!(reword_commits(&repo, &bs, &head, &[edit(c, "  ")]).unwrap_err().contains("empty"));
+        assert!(reword_commits(&repo, &bs, &head, &[edit(base, "x")]).unwrap_err().contains("not part"));
+        assert!(reword_commits(&repo, &bs, &b.to_string(), &[edit(c, "x")]).unwrap_err().contains("changed since"));
+
+        // Reword b and d (c in between is rebuilt with its old message).
+        let n = reword_commits(&repo, &bs, &head, &[edit(d, "D!"), edit(c, "c"), edit(b, "B!\n\nbody")]).unwrap();
+        assert_eq!(n, 2);
+        assert_eq!(log(&repo), ["D!", "c", "B!", "base"]);
+        let new_head = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(new_head.tree_id(), repo.find_commit(d).unwrap().tree_id(), "same content");
+        assert_eq!(new_head.committer().name(), Ok("Editor"));
+        let new_c = new_head.parent(0).unwrap();
+        assert_eq!(new_c.committer().name(), Ok("D"), "an untouched commit keeps its committer");
+        assert_eq!(new_c.parent(0).unwrap().message(), Ok("B!\n\nbody\n"));
+        assert_eq!(new_c.parent(0).unwrap().parent_id(0).unwrap(), base, "the base is untouched");
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "4");
+
+        // A commit beside the current line of history can't be a base.
+        repo.branch("side", &repo.find_commit(b).unwrap(), false).unwrap();
+        let other = repo.find_commit(base).unwrap();
+        let sig = Signature::now("D", "d@example.com").unwrap();
+        let side = repo
+            .commit(
+                Some("refs/heads/side"),
+                &sig,
+                &sig,
+                "side",
+                &other.tree().unwrap(),
+                &[&repo.find_commit(b).unwrap()],
+            )
+            .unwrap();
+        assert!(rebase_plan(&repo, &side.to_string()).unwrap_err().contains("own line"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

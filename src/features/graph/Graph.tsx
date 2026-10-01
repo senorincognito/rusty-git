@@ -67,6 +67,7 @@ export default function Graph({
   onSelectCommit,
   onSelectWip,
   onRenameCommit,
+  onInteractiveRebase,
   onDropCommit,
   onResetCommit,
 }: {
@@ -78,6 +79,8 @@ export default function Graph({
   /** The uncommitted-changes row was clicked. */
   onSelectWip: () => void;
   onRenameCommit: (commit: { id: string; shortId: string }) => void;
+  /** Start an interactive rebase of the commits after this one. */
+  onInteractiveRebase: (commit: { id: string; shortId: string }) => void;
   /** Drop a commit of the current branch (the commits after it are re-created). */
   onDropCommit: (commit: { id: string; shortId: string }) => void;
   /** Reset the branch to a commit (soft, mixed or hard). */
@@ -153,6 +156,18 @@ export default function Graph({
           ? "The first commit of a branch can't be dropped"
           : undefined;
 
+  // An interactive rebase covers the commits after this one on the current branch (the backend also
+  // requires it to be on the branch's own first-parent line).
+  const rebaseReason = !menu
+    ? undefined
+    : menu.row.isStash
+      ? "A stash can't be a rebase base"
+      : !menu.row.onHead
+        ? "Only commits on the current branch can be a rebase base"
+        : rows.find((r) => r.onHead && !r.isWip && !r.isStash)?.id === menu.row.id
+          ? "There are no commits after this one"
+          : undefined;
+
   const laneWidth = Math.min(Math.max(graph?.maxLanes ?? 1, 1), 24) * LANE_W + 4;
 
   if (error) return <p className="error pad">{error}</p>;
@@ -208,6 +223,12 @@ export default function Graph({
                   ? "A stash can't be renamed"
                   : "Only commits on the current branch can be renamed",
               onClick: () => onRenameCommit({ id: menu.row.id, shortId: menu.row.shortId }),
+            },
+            {
+              label: "Interactive rebase…",
+              disabled: rebaseReason !== undefined,
+              title: rebaseReason ?? "Edit the messages of all commits after this one on the current branch",
+              onClick: () => onInteractiveRebase({ id: menu.row.id, shortId: menu.row.shortId }),
             },
             {
               label: "Drop commit",

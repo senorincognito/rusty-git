@@ -45,7 +45,7 @@ say plainly that UI behaviour is untested in the running app.
 | `changes.rs` | status, stage/unstage, `discard_paths` (whole-file discard), `create_commit` (new or `amend`), `get_head_commit` |
 | `hunks.rs` | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see Product decisions) |
 | `commit_detail.rs` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
-| `history.rs` | `get_rename_info`, `rename_commit_message` (rewrites the commit and its descendants); `is_pushed` |
+| `history.rs` | `get_rename_info`, `rename_commit_message`, `get_rebase_plan` + `reword_commits_cmd` (interactive rebase, reword only), drop commit; shared `rebuild_with_messages`; `is_pushed` |
 | `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
 | `remotes.rs` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
 | `sync.rs` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
@@ -58,7 +58,7 @@ say plainly that UI behaviour is untested in the running app.
 ```
 App.tsx                    Welcome or RepoView
 api/                       one typed wrapper file per backend module
-features/welcome|repo|graph|changes|commit|rename|sidebar|toolbar|terminal/
+features/welcome|repo|graph|changes|commit|rename|rebase|sidebar|toolbar|terminal/
 components/                generic UI: ContextMenu, Modal, ResizablePanel, Section, FileBadge
 hooks/                     useLatestRequest, usePersistentState, useAutoFetch
 styles/                    global SCSS: tokens, mixins, base, buttons, switch, filelist, panel (see Styles)
@@ -134,6 +134,12 @@ app rename so users keep their data. Don't change it casually.
   after a successful manual fetch/pull/push. Uses `--no-write-fetch-head --no-auto-gc`, 90 s timeout.
 - **Amend** switch pre-fills the last message, keeps the author, makes you the committer, works with
   nothing staged, warns when the commit is already pushed.
+- **Interactive rebase** (graph context menu, `features/rebase/InteractiveRebase` in the right panel, priority
+  Rebase > Rename > CommitDetail > Changes): the clicked commit is the base and is not edited; `rebase_plan` lists the
+  commits after it on HEAD's first-parent line (max 500, newest first) plus `headId`. Only **reword** exists so far:
+  `reword_commits` rebuilds from the oldest changed commit with `rebuild_with_messages` (the same code Rename uses; no
+  cherry-picks, trees untouched, so no conflicts and no clean working directory needed) and refuses when HEAD moved since
+  the plan. Pick/squash/drop/reorder would need real replays (see Drop commit) and are not built.
 - **Rename commit** (graph context menu) only for commits on the current branch. Rebuilds the commit and
   every later commit with identical trees/authors/dates, then moves the branch; other branches keep the old
   history. Warns about rewritten descendants and pushed commits.

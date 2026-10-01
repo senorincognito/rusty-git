@@ -11,6 +11,7 @@ import Changes from "@/features/changes/Changes";
 import CommitDetail from "@/features/commit/CommitDetail";
 import FileDiff from "@/features/commit/FileDiff";
 import Graph from "@/features/graph/Graph";
+import InteractiveRebase from "@/features/rebase/InteractiveRebase";
 import RenameCommit from "@/features/rename/RenameCommit";
 import Sidebar from "@/features/sidebar/Sidebar";
 import TerminalPanel from "@/features/terminal/TerminalPanel";
@@ -34,6 +35,8 @@ export default function RepoView({
   // Why the last fetch failed (shown as a warning beside "origin"), null while fetching works.
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; shortId: string } | null>(null);
+  // The base commit of an open interactive rebase (the commits after it are edited in the right panel).
+  const [rebasing, setRebasing] = useState<{ id: string; shortId: string } | null>(null);
   // The commit whose files are shown in the right panel (instead of the working-directory changes).
   const [selectedCommit, setSelectedCommit] = useState<{ id: string; shortId: string } | null>(null);
   // A file of the selected commit shown in the centre instead of the graph.
@@ -176,8 +179,16 @@ export default function RepoView({
               onSelectWip={() => {
                 closeCommit(); // back to the working-directory changes in the right panel
                 setRenaming(null);
+                setRebasing(null);
               }}
-              onRenameCommit={setRenaming}
+              onRenameCommit={(c) => {
+                setRebasing(null);
+                setRenaming(c);
+              }}
+              onInteractiveRebase={(c) => {
+                setRenaming(null);
+                setRebasing(c);
+              }}
               onDropCommit={dropCommit}
               onResetCommit={resetCommit}
             />
@@ -202,7 +213,19 @@ export default function RepoView({
           )}
         </div>
         <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
-          {renaming && (
+          {rebasing && (
+            <InteractiveRebase
+              path={path}
+              base={rebasing}
+              onClose={() => setRebasing(null)}
+              onApplied={() => {
+                setRebasing(null);
+                closeCommit(); // the reworded commits (and the ones after them) have new ids
+                reload();
+              }}
+            />
+          )}
+          {!rebasing && renaming && (
             <RenameCommit
               path={path}
               commit={renaming}
@@ -214,7 +237,7 @@ export default function RepoView({
               }}
             />
           )}
-          {!renaming && selectedCommit && (
+          {!rebasing && !renaming && selectedCommit && (
             <CommitDetail
               path={path}
               commit={selectedCommit}
@@ -231,7 +254,7 @@ export default function RepoView({
           <Changes
             path={path}
             refreshKey={graphKey}
-            hidden={renaming !== null || selectedCommit !== null}
+            hidden={rebasing !== null || renaming !== null || selectedCommit !== null}
             selected={openWorkingFile && { path: openWorkingFile.path, staged: openWorkingFile.staged }}
             onSelectFile={setOpenWorkingFile}
             onCommitted={() => {

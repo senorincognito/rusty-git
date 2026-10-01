@@ -16,6 +16,40 @@ export const getRenameInfo = (path: string, id: string) =>
 export const renameCommitMessage = (path: string, id: string, message: string) =>
   invoke<string>("rename_commit_message", { path, id, message });
 
+export interface RebaseCommit {
+  id: string;
+  shortId: string;
+  /** Full message, to pre-fill the editor. */
+  message: string;
+  author: string;
+  /** Unix seconds. */
+  time: number;
+  /** Already on the upstream: changing it rewrites published history. */
+  pushed: boolean;
+  isMerge: boolean;
+}
+
+export interface RebasePlan {
+  /** HEAD when the plan was made; applying refuses if the branch moved since. */
+  headId: string;
+  /** The commits after the base on the current branch, newest first. */
+  commits: RebaseCommit[];
+}
+
+/** The commits an interactive rebase onto `id` covers (every later commit on the current branch). */
+export const getRebasePlan = (path: string, id: string) => invoke<RebasePlan>("get_rebase_plan", { path, id });
+
+/**
+ * Gives several commits new messages at once and rebuilds the commits after them (same content, new ids).
+ * Resolves to the number of commits that changed.
+ */
+export const rewordCommits = (
+  path: string,
+  baseId: string,
+  headId: string,
+  edits: { id: string; message: string }[],
+) => invoke<number>("reword_commits_cmd", { path, baseId, headId, edits });
+
 export interface DropInfo {
   shortId: string;
   summary: string;
