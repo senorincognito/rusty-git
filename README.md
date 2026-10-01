@@ -129,7 +129,8 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 - **Branch** button: create a branch from the current commit and check it out; the name is
   validated and uncommitted changes carry over.
 - **Remotes**: shows `origin` with its URL (right-click it and choose *Edit URL* to change where origin points; Enter saves,
-  Esc cancels, and the remote branches stay until the next fetch) and remote branches. When there is no origin yet,
+  Esc cancels, and the remote branches stay until the next fetch) and remote branches. A yellow ⚠ beside the name means the last fetch failed (hover it for git's message); it
+  disappears after the next successful fetch, pull or background fetch. When there is no origin yet,
   a form adds one.
 - **Context menus** on branches: *Rename branch* and *Delete branch* (both disabled for the
   checked-out branch), and *Rename remote branch* and *Delete remote branch* (both disabled for

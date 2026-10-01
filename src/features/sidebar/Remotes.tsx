@@ -18,10 +18,13 @@ export default function Remotes({
   path,
   refreshKey,
   onChanged,
+  fetchError,
 }: {
   path: string;
   refreshKey: number;
   onChanged: () => void;
+  /** Why the last fetch failed, if it did: shown as a warning beside the remote's name. */
+  fetchError: string | null;
 }) {
   const [origin, setOrigin] = useState<RemoteInfo | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -145,7 +148,14 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
               setHeadMenu({ x: e.clientX, y: e.clientY });
             }}
           >
-            <span className="rname">{origin.name}</span>
+            <span className="rname">
+              {origin.name}
+              {fetchError && (
+                <span className="rwarn" role="img" title={`Fetching failed: ${fetchError}`} aria-label="Fetching failed">
+                  ⚠
+                </span>
+              )}
+            </span>
             {editingUrl ? (
               <BranchNameInput
                 initial={origin.url}

@@ -31,6 +31,8 @@ export default function RepoView({
 }) {
   const [graphKey, setGraphKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  // Why the last fetch failed (shown as a warning beside "origin"), null while fetching works.
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; shortId: string } | null>(null);
   // The commit whose files are shown in the right panel (instead of the working-directory changes).
   const [selectedCommit, setSelectedCommit] = useState<{ id: string; shortId: string } | null>(null);
@@ -137,7 +139,7 @@ export default function RepoView({
           {repo.head ?? "(no commits yet)"}
         </span>
         <BranchButton path={path} onCreated={reload} />
-        <SyncBar path={path} refreshKey={graphKey} />
+        <SyncBar path={path} refreshKey={graphKey} onFetchError={setFetchError} />
         <button
           className={"syncbtn termtoggle" + (terminalOpen ? " active" : "")}
           onClick={() => setTerminalOpen((o) => !o)}
@@ -151,6 +153,7 @@ export default function RepoView({
           path={path}
           refreshKey={graphKey}
           onChanged={reload}
+          fetchError={fetchError}
           selectedId={selectedCommit?.id ?? null}
           onSelectCommit={selectCommit}
           onStashPopped={(id) => {

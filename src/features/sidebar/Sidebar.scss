@@ -113,6 +113,13 @@
   font-weight: 600;
 }
 
+// Warning beside the remote's name when fetching fails.
+.rwarn {
+  margin-left: 6px;
+  color: $warn;
+  cursor: help;
+}
+
 .rurl {
   @include truncate;
   color: $muted;

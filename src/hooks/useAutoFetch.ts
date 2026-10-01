@@ -41,6 +41,8 @@ export function useAutoFetch({
 }) {
   const [state, setState] = useState<AutoFetchState>(enabled ? "idle" : "off");
   const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null);
+  /** What git said when the last background fetch failed; null while fetching works. */
+  const [error, setError] = useState<string | null>(null);
   const blockedRef = useRef(blocked);
   blockedRef.current = blocked;
   const sched = useRef<Schedule>(freshSchedule());
@@ -49,6 +51,7 @@ export function useAutoFetch({
     const s = freshSchedule();
     sched.current = s;
     setLastFetchedAt(null);
+    setError(null);
     setState(enabled ? "idle" : "off");
     if (!enabled) return;
 
@@ -62,10 +65,12 @@ export function useAutoFetch({
       s.inFlight = true;
       setState("fetching");
       let status: string;
+      let message = "";
       try {
-        status = (await autoFetch(path)).status;
-      } catch {
+        ({ status, message } = await autoFetch(path));
+      } catch (e) {
         status = "error";
+        message = String(e);
       }
       s.inFlight = false;
       if (cancelled) return;
@@ -74,12 +79,15 @@ export function useAutoFetch({
       if (status === "ok" || status === "none") {
         s.failures = 0;
         if (status === "ok") setLastFetchedAt(s.last);
+        setError(null);
         setState("idle");
       } else if (status === "auth") {
         s.authPaused = true;
+        setError(message || "The remote needs you to sign in.");
         setState("auth");
       } else {
         s.failures += 1;
+        setError(message || "The remote can't be reached.");
         setState("waiting");
       }
     };
@@ -102,8 +110,9 @@ export function useAutoFetch({
     const s = sched.current;
     s.authPaused = false;
     s.failures = 0;
+    setError(null);
     setState((prev) => (prev === "auth" || prev === "waiting" ? "idle" : prev));
   }, []);
 
-  return { state, lastFetchedAt, resume };
+  return { state, lastFetchedAt, error, resume };
 }

@@ -47,10 +47,21 @@ const AUTO_STATE_HINT = {
   },
 } as const;
 
-export default function SyncBar({ path, refreshKey }: { path: string; refreshKey: number }) {
+export default function SyncBar({
+  path,
+  refreshKey,
+  onFetchError,
+}: {
+  path: string;
+  refreshKey: number;
+  /** Called with what git said when fetching fails (manually or in the background), null once it works. */
+  onFetchError: (message: string | null) => void;
+}) {
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [busy, setBusy] = useState<Op | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // The last manual fetch failed (cleared by any successful fetch or pull).
+  const [manualFetchError, setManualFetchError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; kind: MenuKind } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   // Set while the user has to choose how to combine diverged branches.
@@ -65,6 +76,12 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
     (v): v is number => typeof v === "number" && Number.isFinite(v) && v >= 30,
   );
   const auto = useAutoFetch({ path, enabled: autoOn, seconds: autoSecs, blocked: busy !== null });
+
+  const fetchError = manualFetchError ?? auto.error;
+  useEffect(() => {
+    onFetchError(fetchError);
+  }, [fetchError, onFetchError]);
+  useEffect(() => () => onFetchError(null), [onFetchError]);
 
   const refresh = useCallback(async () => {
     const isCurrent = start();
@@ -83,6 +100,7 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
 
   useEffect(() => {
     setNotice(null);
+    setManualFetchError(null);
   }, [path]);
 
   // Successful results fade away; errors stay until dismissed.
@@ -98,9 +116,11 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
     try {
       const out = await OPS[op].run(path);
       setNotice({ kind: "ok", text: out || `${OPS[op].label} complete` });
+      if (op !== "push" && op !== "force") setManualFetchError(null);
       auto.resume(); // the remote works and credentials are fine
     } catch (e) {
       setNotice({ kind: "error", text: String(e) });
+      if (op === "fetch") setManualFetchError(String(e));
     } finally {
       setBusy(null);
       refresh();
@@ -124,6 +144,7 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
     try {
       const out = await gitPull(path);
       setNotice({ kind: "ok", text: out || "Pull complete" });
+      setManualFetchError(null); // a pull fetches first
       auto.resume();
     } catch (e) {
       const text = String(e);

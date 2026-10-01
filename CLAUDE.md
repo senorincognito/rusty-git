@@ -116,6 +116,9 @@ app rename so users keep their data. Don't change it casually.
   conflict UI yet. `pull.rebase` is intentionally not consulted.
 - **Force push** is `git push --force-with-lease`, behind a confirmation that counts the remote commits
   that will be discarded. Only offered when the branch has an upstream.
+- **Fetch failures** show as a ⚠ beside "origin" in the sidebar (tooltip = git's message). `SyncBar` combines its last manual
+  fetch error with `useAutoFetch().error` and reports it up via `onFetchError` to `RepoView`, which passes `fetchError` to
+  `Sidebar` > `Remotes`. Any successful fetch, pull or background fetch clears it; a failed push does not set it.
 - **Auto-fetch**: on by default, every 180 s, only while the window is focused/visible, never overlapping a
   manual git operation, exponential backoff when offline, pauses (does not retry) on auth errors, resumes
   after a successful manual fetch/pull/push. Uses `--no-write-fetch-head --no-auto-gc`, 90 s timeout.
