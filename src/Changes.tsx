@@ -53,9 +53,11 @@ function FileList(props: {
 
 export default function Changes({
   path,
+  refreshKey = 0,
   onCommitted,
 }: {
   path: string;
+  refreshKey?: number;
   onCommitted: () => void;
 }) {
   const [changes, setChanges] = useState<FileChange[]>([]);
@@ -78,6 +80,11 @@ export default function Changes({
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
   }, [path, refresh]);
+
+  // Reload when the parent reports a repo change (e.g. a commit or checkout made elsewhere).
+  useEffect(() => {
+    refresh();
+  }, [refreshKey, refresh]);
 
   const staged = useMemo(
     () => changes.filter((c) => c.staged).map((c) => ({ path: c.path, kind: c.staged! })),

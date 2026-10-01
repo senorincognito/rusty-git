@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import {
   getRecentRepos,
   openRepo,
   pickFolder,
   removeRecentRepo,
+  unwatchRepo,
+  watchRepo,
   type RepoInfo,
 } from "./git";
 import Changes from "./Changes";
@@ -38,11 +41,25 @@ function App() {
     [refreshRecents],
   );
 
-  // After a commit: redraw the graph and refresh the branch label (first commit creates the branch).
-  const onCommitted = useCallback(() => {
+  // Redraw the graph and refresh the branch label (a first commit creates the branch).
+  const reload = useCallback((path: string) => {
     setGraphKey((k) => k + 1);
-    if (repo) openRepo(repo.path).then(setRepo).catch(() => {});
-  }, [repo]);
+    openRepo(path).then(setRepo).catch(() => {});
+  }, []);
+
+  const onCommitted = useCallback(() => repo && reload(repo.path), [repo, reload]);
+
+  // Follow changes made outside the app (terminal, editor, other tools) while a repo is open.
+  const repoPath = repo?.path;
+  useEffect(() => {
+    if (!repoPath) return;
+    watchRepo(repoPath).catch(() => {});
+    const unlisten = listen("repo-changed", () => reload(repoPath));
+    return () => {
+      unlisten.then((fn) => fn());
+      unwatchRepo().catch(() => {});
+    };
+  }, [repoPath, reload]);
 
   const browse = useCallback(async () => {
     const path = await pickFolder();
@@ -64,7 +81,7 @@ function App() {
         </header>
         <div className="body">
           <Graph path={repo.path} refreshKey={graphKey} />
-          <Changes path={repo.path} onCommitted={onCommitted} />
+          <Changes path={repo.path} refreshKey={graphKey} onCommitted={onCommitted} />
         </div>
       </div>
     );

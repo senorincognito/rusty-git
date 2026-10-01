@@ -71,3 +71,6 @@ export const unstagePaths = (path: string, paths: string[]) =>
   invoke<void>("unstage_paths", { path, paths });
 export const createCommit = (path: string, message: string) =>
   invoke<string>("create_commit", { path, message });
+
+export const watchRepo = (path: string) => invoke<void>("watch_repo", { path });
+export const unwatchRepo = () => invoke<void>("unwatch_repo");

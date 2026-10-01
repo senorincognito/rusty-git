@@ -34,7 +34,9 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 - Commit is refused when there is no message, nothing is staged, conflicts are
   unresolved, or `user.name` / `user.email` aren't configured. Errors are shown in the panel.
 - Finishing an in-progress merge records the merge parents and clears the merge state.
-- The graph and branch label refresh after each commit, and the file lists refresh when
+- The graph, branch label and file lists reload automatically when the repo changes, even
+  from outside the app (terminal, editor, other tools): the `.git` folder is watched for
+  HEAD, index and ref changes. File lists also refresh when
   the window regains focus, so edits made in your editor show up.
 
 ## Not yet implemented
@@ -65,6 +67,7 @@ cargo test --manifest-path src-tauri/Cargo.toml   # backend tests
 | `src-tauri/src/repo.rs` | Open repo, recent repos list |
 | `src-tauri/src/graph.rs` | Commit walk, ref labels, lane layout (with tests) |
 | `src-tauri/src/changes.rs` | Status, stage / unstage, create commit (with tests) |
+| `src-tauri/src/watch.rs` | Watches `.git` and emits `repo-changed` for live reload |
 | `src/git.ts` | Typed wrappers around the Tauri commands |
 | `src/Graph.tsx` | Virtualised commit graph |
 | `src/Changes.tsx` | Staging and commit panel |
