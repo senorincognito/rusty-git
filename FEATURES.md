@@ -232,6 +232,7 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 | `Ctrl`/`Cmd` + `Enter` | Commit (staging panel) or Update (rename dialog) |
 | `Enter` / `Space` | Open the focused file row; `Enter` confirms an inline branch rename |
 | `←` / `→` on a panel's resize handle | Resize it (hold `Shift` for bigger steps) |
+| `↑` / `↓` in the commit graph | Select the commit above / below the selected one (the uncommitted-changes row counts as selected while no commit is) |
 | `↑` / `↓` in the interactive rebase | Select the commit above / below (with nothing selected: `↓` selects the top commit, `↑` the bottom one) |
 | `Ctrl`/`Cmd` + `↑` / `↓` in the interactive rebase | Move the selected commit up / down (`Cmd` on macOS, `Ctrl` elsewhere) |
 
@@ -246,4 +247,3 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 - A conflict-resolution UI (a pull that conflicts is cancelled and the repository left untouched)
 - Syntax highlighting and intra-line diff highlighting, side-by-side diff
 - Multiple remotes work, but only the target remote is used to publish new branches
-- Keyboard navigation in the graph

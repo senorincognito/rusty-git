@@ -118,7 +118,8 @@ app rename so users keep their data. Don't change it casually.
   (`input`/`textarea`/`select`/contenteditable; xterm's hidden textarea counts) and must do nothing while a
   `.ctxmenu` or `.modal-backdrop` is open, because those handle their own Escape. `FileDiff` is the model.
   Existing shortcuts: Esc (close diff / menus / dialogs / editors), Ctrl+\` terminal (`RepoView`),
-  Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles, ↑/↓ (and Ctrl/Cmd+↑/↓ to move) in the
+  Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles, ↑/↓ in the commit graph (`Graph`, `keyboard` prop: off while a diff, the rename panel or the
+  rebase screen covers it), ↑/↓ (and Ctrl/Cmd+↑/↓ to move) in the
   interactive rebase (`InteractiveRebase`, window-level; skips editable targets, menus, popups and `diffOpen`). Keep the shortcuts table in `FEATURES.md` in sync.
 - **Texts** live in `src/i18n/en.ts`, never inline in components: labels, titles/tooltips, aria-labels, placeholders,
   confirmation texts, notices. Use `t.<section>.<key>` (strings), functions for texts with values (`t.sync.pushTo(upstream)`,
@@ -390,4 +391,4 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 Tags in the sidebar; applying a stash without removing it; line-level (single line) staging and unstaging; checkout of remote branches; merge/rebase as standalone actions; discard
 changes and stash; conflict resolution UI (pulls with conflicts are aborted); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
-(`git merge-tree`) before pulling; keyboard navigation in the graph.
+(`git merge-tree`) before pulling.

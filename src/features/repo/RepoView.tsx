@@ -173,6 +173,7 @@ export default function RepoView({
                   path={path}
                   refreshKey={graphKey}
                   selectedId={selectedCommit?.id ?? null}
+                  keyboard={!rebasing && !openFile && !openWorkingFile && !renaming}
                   onSelectCommit={selectCommit}
                   onSelectWip={() => {
                     closeCommit(); // back to the working-directory changes in the right panel

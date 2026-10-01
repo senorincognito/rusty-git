@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "@/api/graph";
 import type { ResetMode } from "@/api/history";
 import ContextMenu from "@/components/ContextMenu";
@@ -65,6 +65,7 @@ export default function Graph({
   path,
   refreshKey = 0,
   selectedId,
+  keyboard = true,
   onSelectCommit,
   onSelectWip,
   onRenameCommit,
@@ -76,6 +77,8 @@ export default function Graph({
   refreshKey?: number;
   /** The commit whose details are open, if any (none: the working-directory changes are shown). */
   selectedId: string | null;
+  /** Up/Down move the selection. Off while something else covers the graph (a diff, the rebase screen). */
+  keyboard?: boolean;
   onSelectCommit: (commit: { id: string; shortId: string }) => void;
   /** The uncommitted-changes row was clicked. */
   onSelectWip: () => void;
@@ -134,9 +137,46 @@ export default function Graph({
     return () => ro.disconnect();
   }, []);
 
-  const rows = graph?.rows ?? [];
+  const rows = useMemo(() => graph?.rows ?? [], [graph]);
   const first = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
   const last = Math.min(rows.length, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
+
+  // Up/Down move the selection to the row above/below. The uncommitted-changes row counts as selected while no
+  // commit is, so Down leaves it for the first commit. Typing in a field, an open menu or dialog and modifier keys
+  // leave the arrows alone.
+  useEffect(() => {
+    if (!keyboard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || e.defaultPrevented || e.isComposing) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (document.querySelector(".ctxmenu, .modal-backdrop")) return;
+      const current = selectedId === null ? rows.findIndex((r) => r.isWip) : rows.findIndex((r) => r.id === selectedId);
+      if (current < 0) return; // nothing selected in the graph
+      e.preventDefault(); // keep the list from scrolling by itself
+      const next = current + (e.key === "ArrowUp" ? -1 : 1);
+      const row = rows[next];
+      if (!row) return;
+      if (row.isWip) onSelectWip();
+      else onSelectCommit({ id: row.id, shortId: row.shortId });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [keyboard, rows, selectedId, onSelectCommit, onSelectWip]);
+
+  // Keep the selected row in view when the selection moves (the list is virtualised, so scroll by arithmetic).
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const index = selectedId === null ? rows.findIndex((r) => r.isWip) : rows.findIndex((r) => r.id === selectedId);
+    if (index < 0) return;
+    const top = index * ROW_H;
+    if (top < el.scrollTop) el.scrollTop = top;
+    else if (top + ROW_H > el.scrollTop + el.clientHeight) el.scrollTop = top + ROW_H - el.clientHeight;
+    // Only when the selection changes, not on every reload of the rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   // Load the next page when the user nears the end.
   useEffect(() => {
