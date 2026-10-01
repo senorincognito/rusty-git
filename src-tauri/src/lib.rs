@@ -45,6 +45,7 @@ pub fn run() {
             remotes::add_origin_remote,
             stash::create_stash,
             stash::get_stashes,
+            stash::pop_stash_cmd,
             sync::get_divergence,
             sync::get_sync_status,
             sync::git_fetch,

@@ -20,3 +20,10 @@ export const getStashes = (path: string) => invoke<StashEntry[]>("get_stashes", 
  */
 export const createStash = (path: string, message: string | null) =>
   invoke<string>("create_stash", { path, message });
+
+/**
+ * Applies a stash and removes it from the list (git stash pop), putting staged changes back as
+ * staged. Needs a clean working directory. A pop that conflicts is undone and the stash is kept
+ * (the rejection explains). The stash is addressed by commit id, not list position.
+ */
+export const popStash = (path: string, id: string) => invoke<void>("pop_stash_cmd", { path, id });

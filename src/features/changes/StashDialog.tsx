@@ -53,7 +53,7 @@ export default function StashDialog({
           disabled={busy}
         />
         {error && <p className="error">{error}</p>}
-        <p className="modal-hint">Applying a stash is not available in the app yet: use git stash pop in the terminal.</p>
+        <p className="modal-hint">Select the stash in the graph or the Stashes list and press Pop to bring the changes back.</p>
         <div className="modal-actions">
           <button type="button" className="secondary" onClick={onClose} disabled={busy}>
             Cancel

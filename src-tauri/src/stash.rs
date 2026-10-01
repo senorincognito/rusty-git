@@ -1,4 +1,5 @@
-use git2::{Commit, ErrorCode, Oid, Repository, StashFlags, Tree};
+use git2::build::CheckoutBuilder;
+use git2::{Commit, ErrorCode, ObjectType, Oid, Repository, ResetType, StashApplyOptions, StashFlags, Tree};
 use serde::Serialize;
 
 #[derive(Serialize, Debug, Clone)]
@@ -72,6 +73,62 @@ pub(crate) fn save_stash(repo: &mut Repository, message: Option<&str>) -> Result
     }
 }
 
+/// Puts the working directory back to a clean checkout of HEAD, untracked files included.
+fn restore_clean(repo: &Repository) {
+    if let Ok(head) = repo.head().and_then(|h| h.peel(ObjectType::Commit)) {
+        let _ = repo.reset(&head, ResetType::Hard, None);
+    }
+    let mut checkout = CheckoutBuilder::new();
+    checkout.force().remove_untracked(true);
+    let _ = repo.checkout_head(Some(&mut checkout));
+}
+
+/// Applies a stash to the working directory and removes it from the list (`git stash pop`),
+/// putting back what was staged as staged. The stash is found by its commit id, because list
+/// positions shift when other stashes come and go.
+///
+/// It needs a clean working directory. There is no conflict resolution in the app yet, so this
+/// guarantees a conflicting pop can be undone completely: the repository is restored to the clean
+/// state it was in and the stash is kept.
+fn pop_stash(repo: &mut Repository, id: &str) -> Result<(), String> {
+    let oid = Oid::from_str(id).map_err(err)?;
+    let index = stash_index_of(repo, oid).ok_or("That stash no longer exists")?;
+    if repo.head().and_then(|h| h.peel_to_commit()).is_err() {
+        return Err("Make a first commit before applying a stash".into());
+    }
+    if !crate::changes::status_of(repo)?.is_empty() {
+        return Err("The working directory has uncommitted changes. Commit or stash them first, so the stash \
+                    can be applied cleanly and undone if it conflicts."
+            .into());
+    }
+
+    // Apply first and drop only once it is known to be clean: libgit2's own pop reports success for a
+    // conflicting apply (leaving conflict markers behind) and still removes the stash, unlike git.
+    let mut options = StashApplyOptions::new();
+    options.reinstantiate_index();
+    let applied = repo.stash_apply(index, Some(&mut options));
+    let conflicted = repo
+        .index()
+        .map(|mut i| {
+            let _ = i.read(true);
+            i.has_conflicts()
+        })
+        .unwrap_or(false);
+    match applied {
+        Ok(()) if !conflicted => repo.stash_drop(index).map_err(err),
+        outcome => {
+            restore_clean(repo);
+            let reason = match outcome {
+                Err(e) => e.message().trim().to_string(),
+                Ok(()) => "it conflicts with the files in the working directory".to_string(),
+            };
+            Err(format!(
+                "The stash could not be applied cleanly ({reason}). Nothing was changed and the stash was kept."
+            ))
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn get_stashes(path: String) -> Result<Vec<StashEntry>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -87,6 +144,17 @@ pub async fn create_stash(path: String, message: Option<String>) -> Result<Strin
     tauri::async_runtime::spawn_blocking(move || {
         let mut repo = Repository::discover(&path).map_err(err)?;
         save_stash(&mut repo, message.as_deref()).map(|o| o.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Applies a stash and removes it from the list. Needs a clean working directory.
+#[tauri::command]
+pub async fn pop_stash_cmd(path: String, id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut repo = Repository::discover(&path).map_err(err)?;
+        pop_stash(&mut repo, &id)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -171,6 +239,77 @@ mod tests {
         let plain = repo.find_commit(second).unwrap();
         // libgit2 records an untracked-files commit even when there are none: it is just empty.
         assert!(untracked_tree(&repo, &plain).map_or(true, |t| t.is_empty()), "no untracked files in the second stash");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn status_map(repo: &Repository) -> Vec<(String, git2::Status)> {
+        let mut o = StatusOptions::new();
+        o.include_untracked(true).recurse_untracked_dirs(true);
+        repo.statuses(Some(&mut o)).unwrap().iter().map(|e| (e.path().unwrap().to_string(), e.status())).collect()
+    }
+
+    #[test]
+    fn pop_restores_changes_and_drops_the_stash() {
+        let (dir, mut repo) = setup("pop");
+        fs::write(dir.join("a.txt"), "one").unwrap();
+        commit_all(&repo, "base");
+
+        // Stash a tracked edit, a staged new file and an untracked file; pop brings all of them back.
+        fs::write(dir.join("a.txt"), "two").unwrap();
+        fs::write(dir.join("staged.txt"), "staged").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("staged.txt")).unwrap();
+        index.write().unwrap();
+        fs::write(dir.join("untracked.txt"), "untracked").unwrap();
+        let older = save_stash(&mut repo, Some("older")).unwrap();
+        fs::write(dir.join("b.txt"), "b").unwrap();
+        let newer = save_stash(&mut repo, Some("newer")).unwrap();
+
+        // The stash is found by id even though its list position is 1, not 0.
+        pop_stash(&mut repo, &older.to_string()).unwrap();
+        let list = list_stashes(&mut repo).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, newer.to_string(), "the other stash is untouched");
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "two");
+        assert_eq!(fs::read_to_string(dir.join("untracked.txt")).unwrap(), "untracked");
+        let status = status_map(&repo);
+        let flags = |p: &str| status.iter().find(|(n, _)| n == p).map(|(_, s)| *s).unwrap();
+        assert!(flags("a.txt").contains(git2::Status::WT_MODIFIED));
+        assert!(flags("staged.txt").contains(git2::Status::INDEX_NEW), "staged stays staged");
+        assert!(flags("untracked.txt").contains(git2::Status::WT_NEW));
+
+        // A stash that is gone, and a dirty working directory, are refused.
+        assert!(pop_stash(&mut repo, &older.to_string()).unwrap_err().contains("no longer exists"));
+        let e = pop_stash(&mut repo, &newer.to_string()).unwrap_err();
+        assert!(e.contains("uncommitted changes"), "{e}");
+        assert_eq!(list_stashes(&mut repo).unwrap().len(), 1, "a refused pop keeps the stash");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_conflicting_pop_is_undone_and_keeps_the_stash() {
+        let (dir, mut repo) = setup("pop-conflict");
+        fs::write(dir.join("a.txt"), "one").unwrap();
+        commit_all(&repo, "base");
+
+        fs::write(dir.join("a.txt"), "stash version").unwrap();
+        fs::write(dir.join("from-stash.txt"), "untracked in the stash").unwrap();
+        let stash = save_stash(&mut repo, Some("conflicting")).unwrap();
+
+        // Meanwhile the same file was committed differently.
+        fs::write(dir.join("a.txt"), "committed version").unwrap();
+        commit_all(&repo, "meanwhile");
+
+        let e = pop_stash(&mut repo, &stash.to_string()).unwrap_err();
+        assert!(e.contains("could not be applied") && e.contains("stash was kept"), "{e}");
+        // Exactly as before: clean tree, our content, no leftovers from the failed pop, stash still there.
+        assert!(status_map(&repo).is_empty(), "{:?}", status_map(&repo));
+        assert_eq!(repo.state(), git2::RepositoryState::Clean);
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "committed version");
+        assert!(!dir.join("from-stash.txt").exists());
+        assert_eq!(list_stashes(&mut repo).unwrap().len(), 1);
 
         let _ = fs::remove_dir_all(&dir);
     }

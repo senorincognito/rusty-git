@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getStatus } from "@/api/changes";
 import { getCommitDetail, type CommitDetail as CommitDetailData, type CommitFile } from "@/api/commit";
+import { popStash } from "@/api/stash";
 import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 
@@ -16,6 +17,7 @@ export default function CommitDetail({
   refreshKey = 0,
   selectedPath,
   onSelectFile,
+  onStashPopped,
   onClose,
 }: {
   path: string;
@@ -24,11 +26,15 @@ export default function CommitDetail({
   /** The file currently open in the centre view, if any. */
   selectedPath: string | null;
   onSelectFile: (file: CommitFile) => void;
+  /** The stash shown here was applied and removed, so there is nothing left to show. */
+  onStashPopped: () => void;
   onClose: () => void;
 }) {
   const [detail, setDetail] = useState<CommitDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [workingChanges, setWorkingChanges] = useState(0);
+  const [popping, setPopping] = useState(false);
+  const [popError, setPopError] = useState<string | null>(null);
   const startDetail = useLatestRequest();
   const startStatus = useLatestRequest();
 
@@ -60,6 +66,22 @@ export default function CommitDetail({
     window.addEventListener("focus", refreshStatus);
     return () => window.removeEventListener("focus", refreshStatus);
   }, [refreshStatus]);
+
+  useEffect(() => {
+    setPopError(null);
+  }, [commit.id]);
+
+  const pop = async () => {
+    setPopping(true);
+    setPopError(null);
+    try {
+      await popStash(path, commit.id);
+      onStashPopped();
+    } catch (e) {
+      setPopError(String(e));
+      setPopping(false);
+    }
+  };
 
   return (
     <aside className="commitdetail">
@@ -93,9 +115,31 @@ export default function CommitDetail({
               {detail.author} · {dateFmt.format(new Date(detail.time * 1000))}
             </p>
             {detail.stash && (
-              <p className="cd-line">
-                <strong>{detail.stash}</strong>: every uncommitted change that was saved here, including untracked files
-              </p>
+              <>
+                <p className="cd-line">
+                  <strong>{detail.stash}</strong>: every uncommitted change that was saved here, including untracked files
+                </p>
+                <div className="stash-actions">
+                  <button
+                    className="primary small"
+                    disabled={popping || workingChanges > 0}
+                    onClick={pop}
+                    title={
+                      workingChanges > 0
+                        ? "Commit or stash your uncommitted changes first"
+                        : "Apply this stash to the working directory and remove it from the list"
+                    }
+                  >
+                    {popping ? "Popping…" : "Pop"}
+                  </button>
+                  <span className="muted">
+                    {workingChanges > 0
+                      ? "Needs a clean working directory"
+                      : "Applies it and removes it from the list"}
+                  </span>
+                </div>
+                {popError && <p className="error cd-line">{popError}</p>}
+              </>
             )}
             <p className="cd-line">
               {detail.stash

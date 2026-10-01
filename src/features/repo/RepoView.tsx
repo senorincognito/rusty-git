@@ -156,6 +156,10 @@ export default function RepoView({
               refreshKey={graphKey}
               selectedPath={openFile?.path ?? null}
               onSelectFile={setOpenFile}
+              onStashPopped={() => {
+                closeCommit(); // the stash is gone; the right panel shows the restored changes
+                reload();
+              }}
               onClose={closeCommit}
             />
           )}

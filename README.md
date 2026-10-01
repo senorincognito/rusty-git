@@ -72,7 +72,10 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 - Stashes show up in the commit graph as hollow nodes hanging off the commit they were made on, labelled
   `stash@{n}`, and in a **Stashes** section in the left panel (newest first). Click one in either place
   to see its message, base commit and changed files, untracked files included, and open any file's diff.
-- Applying, popping and dropping stashes is not available yet; use `git stash pop` in the terminal.
+- **Pop** (in the stash's detail panel) applies the stash to the working directory and removes it from the
+  list, putting back staged changes as staged and restoring untracked files. It needs a clean working
+  directory (the button is disabled otherwise). If the stash would conflict, the pop is undone completely
+  and the stash is kept. Applying without removing, and dropping, are not available yet.
 
 ### Commit graph context menu
 - Right-click a commit: **Rename commit** opens an editor in the right panel with the full
@@ -142,7 +145,7 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 - Diff view and commit detail panel
 - Tags in the sidebar, remote branch checkout
-- Applying, popping and dropping stashes
+- Applying a stash without removing it, and dropping stashes
 - Merge / rebase, rename branch, push or pull from the context menu
 - Multiple remotes (only `origin` is handled)
 - Discard changes

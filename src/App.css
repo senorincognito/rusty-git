@@ -1447,3 +1447,16 @@ body.resizing {
   font-style: italic;
   color: var(--muted);
 }
+
+.primary.small {
+  padding: 3px 14px;
+  font-size: 12px;
+}
+
+.stash-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+}

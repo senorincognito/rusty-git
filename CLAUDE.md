@@ -133,8 +133,10 @@ app rename so users keep their data. Don't change it casually.
 - **Stash** moves all uncommitted changes, **including untracked files** (not ignored ones), into a stash with an
   optional message (`Stash…` button beside Commit, `StashDialog`). Stashes are visible in the graph (hollow node
   off the base commit, `stash@{n}` chip, row `isStash`) and in a left-panel `Stashes` section; clicking either
-  opens the stash's `CommitDetail`. **Apply/pop/drop are intentionally not built yet** (the user asked to hold
-  off); the dialog tells users to use `git stash pop` in the terminal.
+  opens the stash's `CommitDetail`, which has a **Pop** button (`pop_stash`: apply, check for conflicts, then drop;
+  re-stages what was staged). Pop requires a clean working directory (disabled in the UI, enforced in Rust) so a
+  conflicting pop can be undone exactly (`restore_clean`) with the stash kept. Apply-without-drop and drop
+  are not built yet.
 - Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;
   binary/over-5 MB files are not previewed. The diff view has a "Full file" switch (default on).
 
@@ -157,7 +159,10 @@ app rename so users keep their data. Don't change it casually.
   `stash_index_of` (opens a second handle). A stash commit's parents are [base, saved index, untracked
   files]; the graph draws only the first and hides the other two rows, and `get_commit_detail`/`get_file_diff`
   read the untracked files from the third parent's tree. libgit2 creates that third commit even when there
-  are no untracked files (empty tree), so don't treat its presence as meaningful.
+  are no untracked files (empty tree), so don't treat its presence as meaningful. **libgit2's `stash_pop`
+  returns success for a conflicting apply, leaves conflict markers and still drops the stash** (git keeps the
+  stash): use `stash_apply`, check `index.has_conflicts()` (after `index.read(true)`), and only then
+  `stash_drop`.
 
 **git CLI**
 - A rejected `--force-with-lease` push with `--atomic` prints "atomic push failed"; only fall back to a
@@ -254,7 +259,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 
 ## Not implemented yet
 
-Tags in the sidebar; applying, popping and dropping stashes; hunk/line staging from the diff view; checkout of remote branches; merge/rebase as standalone actions; discard
+Tags in the sidebar; applying a stash without removing it and dropping stashes; hunk/line staging from the diff view; checkout of remote branches; merge/rebase as standalone actions; discard
 changes and stash; conflict resolution UI (pulls with conflicts are aborted); multiple remotes (only
 `origin`); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
