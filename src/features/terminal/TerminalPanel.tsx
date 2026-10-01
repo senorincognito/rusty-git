@@ -4,6 +4,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { termResize, termStart, termStop, termWrite } from "@/api/terminal";
+import { t as text } from "@/i18n";
 import "./TerminalPanel.scss";
 
 const MIN_H = 120;
@@ -52,7 +53,7 @@ export default function TerminalPanel({
       await termStart(pathRef.current, id, t.cols, t.rows);
     } catch (e) {
       exited.current = true;
-      t.write(`\r\nCould not start the terminal: ${e}\r\nPress any key to retry.\r\n`);
+      t.write(text.terminal.startFailed(String(e)));
     }
   }, []);
 
@@ -184,11 +185,11 @@ export default function TerminalPanel({
     <section className="termpanel" style={{ height, display: open ? "flex" : "none" }}>
       <div className="termresize" onMouseDown={startDrag} />
       <header className="termhead">
-        <span>Terminal</span>
+        <span>{text.terminal.title}</span>
         <span className="termpath" title={path}>
           {path}
         </span>
-        <button className="ghost" onClick={onClose} title="Hide terminal (Ctrl+`)">
+        <button className="ghost" onClick={onClose} title={text.terminal.hide}>
           ×
         </button>
       </header>

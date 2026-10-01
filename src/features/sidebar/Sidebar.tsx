@@ -1,5 +1,6 @@
 import { useState } from "react";
 import ResizablePanel from "@/components/ResizablePanel";
+import { t } from "@/i18n";
 import LocalBranches from "./LocalBranches";
 import Remotes from "./Remotes";
 import Stashes from "./Stashes";
@@ -44,13 +45,13 @@ export default function Sidebar({
                 setFilter("");
               }
             }}
-            placeholder="Filter branches and stashes…"
-            aria-label="Filter branches and stashes"
+            placeholder={t.sidebar.filterPlaceholder}
+            aria-label={t.sidebar.filterLabel}
             spellCheck={false}
             autoComplete="off"
           />
           {filter !== "" && (
-            <button className="sidefilter-clear" title="Clear the filter (Esc)" aria-label="Clear the filter" onClick={() => setFilter("")}>
+            <button className="sidefilter-clear" title={t.sidebar.clearFilterHint} aria-label={t.sidebar.clearFilter} onClick={() => setFilter("")}>
               ×
             </button>
           )}

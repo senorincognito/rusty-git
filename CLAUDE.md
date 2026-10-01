@@ -61,6 +61,7 @@ api/                       one typed wrapper file per backend module
 features/welcome|repo|graph|changes|commit|rename|rebase|sidebar|toolbar|terminal/
 components/                generic UI: ContextMenu, Modal, ResizablePanel, Section, FileBadge
 hooks/                     useLatestRequest, usePersistentState, useAutoFetch
+i18n/                      en.ts: every user-facing text; index.ts exports it as `t`, plus `fill`
 styles/                    global SCSS: tokens, mixins, base, buttons, switch, filelist, panel (see Styles)
 *.scss next to components  each component's own styles, imported by that component
 ```
@@ -115,6 +116,12 @@ app rename so users keep their data. Don't change it casually.
   `.ctxmenu` or `.modal-backdrop` is open, because those handle their own Escape. `FileDiff` is the model.
   Existing shortcuts: Esc (close diff / menus / dialogs / editors), Ctrl+\` terminal (`RepoView`),
   Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles. Keep the shortcuts table in `FEATURES.md` in sync.
+- **Texts** live in `src/i18n/en.ts`, never inline in components: labels, titles/tooltips, aria-labels, placeholders,
+  confirmation texts, notices. Use `t.<section>.<key>` (strings), functions for texts with values (`t.sync.pushTo(upstream)`,
+  pluralise with the local `plural` helper), and `fill(template, { name: <strong>…</strong> })` for sentences containing markup.
+  Sections follow the features (`changes`, `graph`, `rebase`, ...); shared words go in `common`. Only English exists and no
+  other language is planned: this is for tidiness, so don't add a locale switch. Backend (Rust) error messages are shown as
+  they come and are not in the file. In `TerminalPanel` the import is `t as text`, because `t` is the xterm instance there.
 - Match the surrounding comment density: short comments that explain *why*, none restating the code.
 
 ## Product decisions already made (keep consistent)

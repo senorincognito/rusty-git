@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createBranch } from "@/api/branches";
+import { t } from "@/i18n";
 
 /**
  * Asks for a name, then creates a branch at the current commit and checks it out. Shared by the
@@ -44,7 +45,7 @@ export default function NewBranchForm({
       }}
       onKeyDown={(e) => e.key === "Escape" && onCancel()}
     >
-      <label htmlFor={id}>New branch name</label>
+      <label htmlFor={id}>{t.newBranch.nameLabel}</label>
       <input
         id={id}
         ref={input}
@@ -53,14 +54,14 @@ export default function NewBranchForm({
           setName(e.target.value);
           setError(null);
         }}
-        placeholder="feature/my-change"
+        placeholder={t.newBranch.namePlaceholder}
         spellCheck={false}
         autoComplete="off"
       />
       {error && <p className="error">{error}</p>}
-      <p className="muted hint">Created from the current commit and checked out.</p>
+      <p className="muted hint">{t.newBranch.hint}</p>
       <button className="primary" type="submit" disabled={busy || name.trim() === ""}>
-        Create &amp; checkout
+        {t.newBranch.submit}
       </button>
     </form>
   );

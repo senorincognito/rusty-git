@@ -4,6 +4,7 @@ import { popStash } from "@/api/stash";
 import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
+import { fill, t } from "@/i18n";
 import "./CommitDetail.scss";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -68,23 +69,23 @@ export default function CommitDetail({
       {workingChanges > 0 && (
         <div className="wd-notice" role="status">
           <span>
-            {workingChanges} file change{workingChanges === 1 ? "" : "s"} in working directory
+            {t.commitDetail.workingChanges(workingChanges)}
           </span>
           <button className="secondary small" onClick={onClose}>
-            View changes
+            {t.commitDetail.viewChanges}
           </button>
         </div>
       )}
       <header className="panel-head">
-        <span>Commit</span>
+        <span>{t.commitDetail.title}</span>
         <code>{commit.shortId}</code>
-        <button className="ghost" onClick={onClose} title="Close commit details">
+        <button className="ghost" onClick={onClose} title={t.commitDetail.close}>
           ×
         </button>
       </header>
 
       {error && <p className="error side-msg">{error}</p>}
-      {!detail && !error && <p className="muted side-msg">Loading…</p>}
+      {!detail && !error && <p className="muted side-msg">{t.common.loading}</p>}
 
       {detail && (
         <>
@@ -97,27 +98,27 @@ export default function CommitDetail({
             {detail.stash && (
               <>
                 <p className="cd-line">
-                  <strong>{detail.stash}</strong>: every uncommitted change that was saved here, including untracked files
+                  {fill(t.commitDetail.stashContents, { stash: <strong>{detail.stash}</strong> })}
                 </p>
               </>
             )}
             <p className="cd-line">
               {detail.stash
-                ? `Made on ${detail.parents[0] ?? "an unknown commit"}`
+                ? t.commitDetail.madeOn(detail.parents[0])
                 : detail.parents.length === 0
-                  ? "Root commit"
-                  : `Parent${detail.parents.length === 1 ? "" : "s"}: ${detail.parents.join(", ")}`}
-              {detail.isMerge && " · changes shown against the first parent"}
+                  ? t.commitDetail.root
+                  : t.commitDetail.parents(detail.parents)}
+              {detail.isMerge && t.commitDetail.againstFirstParent}
             </p>
           </div>
 
           <section className="filelist">
             <header>
               <span>
-                Changed files <span className="count">{detail.totalFiles}</span>
+                {t.commitDetail.changedFiles} <span className="count">{detail.totalFiles}</span>
               </span>
             </header>
-            {detail.files.length === 0 && <p className="muted side-msg">This commit changes no files.</p>}
+            {detail.files.length === 0 && <p className="muted side-msg">{t.commitDetail.noFiles}</p>}
             <ul>
               {detail.files.map((f) => (
                 <li
@@ -141,7 +142,7 @@ export default function CommitDetail({
             </ul>
             {detail.truncated && (
               <p className="muted side-msg">
-                Showing the first {detail.files.length} of {detail.totalFiles} files.
+                {t.commitDetail.truncated(detail.files.length, detail.totalFiles)}
               </p>
             )}
           </section>
@@ -154,17 +155,16 @@ export default function CommitDetail({
           {popError && <p className="error">{popError}</p>}
           {workingChanges > 0 && (
             <p className="muted">
-              Commit or stash your uncommitted changes first: a stash can only be popped onto a clean working
-              directory.
+              {t.commitDetail.popNeedsClean}
             </p>
           )}
           <button
             className="primary"
             disabled={popping || workingChanges > 0}
             onClick={pop}
-            title="Apply this stash to the working directory and remove it from the list"
+            title={t.commitDetail.popHint}
           >
-            {popping ? "Popping…" : "Pop stash"}
+            {popping ? t.commitDetail.popping : t.commitDetail.pop}
           </button>
         </footer>
       )}

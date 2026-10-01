@@ -12,6 +12,7 @@ import {
 import FileBadge, { type FileStatus } from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { usePersistentState } from "@/hooks/usePersistentState";
+import { t } from "@/i18n";
 import "./FileDiff.scss";
 
 const ROW_H = 20;
@@ -184,10 +185,10 @@ export default function FileDiff({
   const discard = async (block: number, adds: number, dels: number) => {
     if (!diff) return;
     const ok = await confirmDialog(
-      `Discard this hunk (+${adds} -${dels}) from ${file.path}?\n\nThe lines are removed from the file and can't be recovered.`,
-      "Discard hunk",
+      t.diff.discardHunkConfirm(adds, dels, file.path),
+      t.diff.discardHunk,
       true,
-      "Discard",
+      t.diff.discardOk,
     );
     if (ok) act(() => discardHunk(path, file.path, block, diff.blocks[block]));
   };
@@ -197,7 +198,7 @@ export default function FileDiff({
   const lines = diff?.lines ?? [];
   const maxNo = lines.reduce((m, l) => Math.max(m, l.oldNo ?? 0, l.newNo ?? 0), 0);
   const gutter = `${Math.max(String(maxNo).length, 2) + 1}ch`;
-  const origin = source.kind === "commit" ? source.shortId : source.kind === "staged" ? "staged" : "unstaged";
+  const origin = source.kind === "commit" ? source.shortId : source.kind === "staged" ? t.diff.staged : t.diff.unstaged;
   const hunkCount = diff?.blocks.length ?? 0;
 
   return (
@@ -206,26 +207,26 @@ export default function FileDiff({
         <button
           className="ghost"
           onClick={onClose}
-          title={isWorking ? "Close the diff (Esc)" : "Back to the commit graph (Esc)"}
+          title={isWorking ? t.diff.closeHint : t.diff.backHint}
         >
-          {isWorking ? "← Back" : "← Back to graph"}
+          {isWorking ? t.diff.back : t.diff.backToGraph}
         </button>
         <FileBadge kind={file.status} />
         <span className="fd-path" title={file.path}>
           {file.path}
         </span>
-        {file.oldPath && <span className="fd-from">renamed from {file.oldPath}</span>}
+        {file.oldPath && <span className="fd-from">{t.diff.renamedFrom(file.oldPath)}</span>}
         <code className="fd-commit">{origin}</code>
         {diff && !diff.binary && (
           <span className="fd-stats">
             <span className="add">+{diff.additions}</span> <span className="del">-{diff.deletions}</span>
-            {diff.truncated && <span className="muted"> · first {lines.length} lines shown</span>}
+            {diff.truncated && <span className="muted">{t.diff.firstLines(lines.length)}</span>}
           </span>
         )}
-        <label className="switch" title="Show the whole file, or only the changed parts with 3 lines of context">
+        <label className="switch" title={t.diff.fullFileHint}>
           <input type="checkbox" role="switch" checked={full} onChange={(e) => setFull(e.target.checked)} />
           <span className="switch-track" aria-hidden="true" />
-          <span>Full file</span>
+          <span>{t.diff.fullFile}</span>
         </label>
       </header>
       {actionError && <p className="fd-error">{actionError}</p>}
@@ -237,13 +238,13 @@ export default function FileDiff({
         style={{ "--ln": gutter } as React.CSSProperties}
       >
         {error && <p className="error pad">{error}</p>}
-        {!diff && !error && <p className="muted pad">Loading…</p>}
-        {diff?.binary && <p className="muted pad">Binary or very large file: no preview.</p>}
+        {!diff && !error && <p className="muted pad">{t.common.loading}</p>}
+        {diff?.binary && <p className="muted pad">{t.diff.binary}</p>}
         {diff && !diff.binary && lines.length === 0 && (
           <p className="muted pad">
             {isWorking
-              ? `This file has no ${source.kind} changes (any more).`
-              : "No content changes in this file (for example, only its mode changed)."}
+              ? t.diff.noWorkingChanges(source.kind === "staged" ? t.diff.staged : t.diff.unstaged)
+              : t.diff.noContentChanges}
           </p>
         )}
         {rows.length > 0 && (
@@ -255,7 +256,7 @@ export default function FileDiff({
                   <div key={`hunk-${row.block}`} className="dl block" style={{ top }}>
                     <span className="bk">
                       <span className="bk-title">
-                        Hunk {row.block + 1} of {hunkCount} · <span className="add">+{row.adds}</span>{" "}
+                        {t.diff.hunk(row.block + 1, hunkCount)}<span className="add">+{row.adds}</span>{" "}
                         <span className="del">-{row.dels}</span>
                       </span>
                       {canUnstage && (
@@ -263,9 +264,9 @@ export default function FileDiff({
                           className="bk-btn"
                           disabled={acting}
                           onClick={() => unstage(row.block)}
-                          title="Take this hunk back out of the staging area (the file on disk is not changed)"
+                          title={t.diff.unstageHunkHint}
                         >
-                          Unstage hunk
+                          {t.diff.unstageHunk}
                         </button>
                       )}
                       {canStage && (
@@ -274,17 +275,17 @@ export default function FileDiff({
                             className="bk-btn"
                             disabled={acting}
                             onClick={() => stage(row.block)}
-                            title="Put this hunk into the staging area"
+                            title={t.diff.stageHunkHint}
                           >
-                            Stage hunk
+                            {t.diff.stageHunk}
                           </button>
                           <button
                             className="bk-btn danger"
                             disabled={acting}
                             onClick={() => discard(row.block, row.adds, row.dels)}
-                            title="Remove this hunk from the file (cannot be undone)"
+                            title={t.diff.discardHunkHint}
                           >
-                            Discard hunk
+                            {t.diff.discardHunk}
                           </button>
                         </>
                       )}

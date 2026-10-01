@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "@/i18n";
 
 /**
  * Inline editor that takes the place of a branch name in the sidebar list. Enter confirms,
@@ -9,7 +10,7 @@ export default function BranchNameInput({
   initial,
   onSubmit,
   onCancel,
-  label = "New branch name",
+  label = t.sidebar.branchNameLabel,
 }: {
   initial: string;
   onSubmit: (value: string) => Promise<void>;

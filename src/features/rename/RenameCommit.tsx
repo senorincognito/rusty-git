@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getRenameInfo, renameCommitMessage, type RenameInfo } from "@/api/history";
+import { t } from "@/i18n";
 import "./RenameCommit.scss";
 
 /** Right-hand panel for editing a commit's message. "Update" rewrites the commit. */
@@ -67,38 +68,37 @@ export default function RenameCommit({
       }}
     >
       <header className="panel-head">
-        <span>Rename commit</span>
+        <span>{t.rename.title}</span>
         <code>{commit.shortId}</code>
       </header>
       <div className="renamebody">
-        <label htmlFor="rename-message">Commit message</label>
+        <label htmlFor="rename-message">{t.rename.messageLabel}</label>
         <textarea
           id="rename-message"
           ref={box}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           disabled={!info || busy}
-          placeholder={info || error ? undefined : "Loading…"}
+          placeholder={info || error ? undefined : t.common.loading}
         />
         {info?.pushed && (
           <p className="warn">
-            This commit is already pushed. Renaming rewrites history, so it will need a force push.
+            {t.rename.pushed}
           </p>
         )}
         {info && info.laterCommits > 0 && (
           <p className="note">
-            {info.laterCommits} later commit{info.laterCommits === 1 ? "" : "s"} on this branch will be
-            rewritten too (new ids, same content).
+            {t.rename.later(info.laterCommits)}
           </p>
         )}
         {error && <p className="error">{error}</p>}
       </div>
       <footer className="renamefoot">
         <button className="secondary" onClick={onClose} disabled={busy}>
-          Cancel
+          {t.common.cancel}
         </button>
         <button className="primary" onClick={update} disabled={!canUpdate}>
-          Update
+          {t.rename.update}
         </button>
       </footer>
     </aside>

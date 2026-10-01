@@ -1,5 +1,6 @@
 import type { BriefCommit, Divergence } from "@/api/sync";
 import Modal from "@/components/Modal";
+import { fill, t } from "@/i18n";
 import "./PullDialog.scss";
 
 function CommitList({ title, commits, total }: { title: string; commits: BriefCommit[]; total: number }) {
@@ -14,7 +15,7 @@ function CommitList({ title, commits, total }: { title: string; commits: BriefCo
             <code>{c.shortId}</code> <span>{c.summary}</span>
           </li>
         ))}
-        {total > commits.length && <li className="muted">… and {total - commits.length} more</li>}
+        {total > commits.length && <li className="muted">{t.pullDialog.more(total - commits.length)}</li>}
       </ul>
     </section>
   );
@@ -36,29 +37,30 @@ export default function PullDialog({
   onCancel: () => void;
 }) {
   return (
-    <Modal title="Branches have diverged" onClose={onCancel} width={640}>
+    <Modal title={t.pullDialog.title} onClose={onCancel} width={640}>
       <p className="modal-lead">
-        <strong>{d.branch}</strong> and <strong>{d.upstream}</strong> each have commits the other doesn't, so
-        the pull can't simply fast-forward. Choose how to combine them.
+        {fill(t.pullDialog.lead, { branch: <strong>{d.branch}</strong>, upstream: <strong>{d.upstream}</strong> })}
       </p>
       <div className="div-cols">
-        <CommitList title="↑ Only on your branch" commits={d.ahead} total={d.aheadTotal} />
-        <CommitList title={`↓ Only on ${d.upstream}`} commits={d.behind} total={d.behindTotal} />
+        <CommitList title={t.pullDialog.onlyLocal} commits={d.ahead} total={d.aheadTotal} />
+        <CommitList title={t.pullDialog.onlyRemote(d.upstream)} commits={d.behind} total={d.behindTotal} />
       </div>
       <p className="modal-hint">
-        <strong>Merge</strong> keeps all commits as they are and adds a merge commit (the safest choice).{" "}
-        <strong>Rebase</strong> replays your commits on top of {d.upstream}, which gives them new ids. If there are
-        conflicts, the pull is cancelled and nothing is changed. Uncommitted changes are set aside and restored.
+        {fill(t.pullDialog.hint, {
+          merge: <strong>{t.pullDialog.merge}</strong>,
+          rebase: <strong>{t.pullDialog.rebase}</strong>,
+          upstream: d.upstream,
+        })}
       </p>
       <div className="modal-actions">
         <button className="secondary" onClick={onCancel}>
-          Cancel
+          {t.common.cancel}
         </button>
         <button className="secondary" onClick={onRebase}>
-          Rebase
+          {t.pullDialog.rebase}
         </button>
         <button className="primary" onClick={onMerge} autoFocus>
-          Merge
+          {t.pullDialog.merge}
         </button>
       </div>
     </Modal>

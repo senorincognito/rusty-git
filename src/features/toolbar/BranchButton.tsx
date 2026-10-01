@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { t } from "@/i18n";
 import NewBranchForm from "./NewBranchForm";
 import "./Toolbar.scss";
 
@@ -27,7 +28,7 @@ export default function BranchButton({
   return (
     <div className="branchbtn" ref={root}>
       <button className="syncbtn" onClick={() => setOpen((o) => !o)}>
-        ⑂ Branch
+        {t.newBranch.button}
       </button>
       {open && (
         <NewBranchForm

@@ -15,6 +15,7 @@ import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
 import { useAutoFetch } from "@/hooks/useAutoFetch";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { usePersistentState } from "@/hooks/usePersistentState";
+import { t } from "@/i18n";
 import PullDialog from "./PullDialog";
 import "./Toolbar.scss";
 
@@ -23,27 +24,27 @@ type MenuKind = "fetch" | "pull" | "push";
 type Notice = { kind: "ok" | "error"; text: string };
 
 const OPS: Record<Op, { label: string; run: (path: string) => Promise<string> }> = {
-  fetch: { label: "Fetch", run: gitFetch },
-  pull: { label: "Pull", run: gitPull },
-  push: { label: "Push", run: gitPush },
-  force: { label: "Force push", run: gitForcePush },
+  fetch: { label: t.sync.fetch, run: gitFetch },
+  pull: { label: t.sync.pull, run: gitPull },
+  push: { label: t.sync.push, run: gitPush },
+  force: { label: t.sync.forcePush, run: gitForcePush },
 };
 
 // What git says when a pull can't fast-forward.
 const isNotFastForward = (msg: string) => /not possible to fast-forward|diverging branches/i.test(msg);
 
 const AUTO_FETCH_CHOICES = [60, 180, 300, 600]; // seconds
-const intervalLabel = (secs: number) => `${secs / 60} minute${secs === 60 ? "" : "s"}`;
+const intervalLabel = (secs: number) => t.sync.minutes(secs / 60);
 
 const AUTO_STATE_HINT = {
-  fetching: { icon: "⟳", text: "Fetching in the background…" },
+  fetching: { icon: "⟳", text: t.sync.autoFetchFetching },
   auth: {
     icon: "⚠",
-    text: "Auto-fetch is paused: the remote needs you to sign in. A successful manual fetch resumes it.",
+    text: t.sync.autoFetchAuth,
   },
   waiting: {
     icon: "…",
-    text: "Auto-fetch can't reach the remote right now. It will retry with a longer delay.",
+    text: t.sync.autoFetchWaiting,
   },
 } as const;
 
@@ -115,7 +116,7 @@ export default function SyncBar({
     setNotice(null);
     try {
       const out = await OPS[op].run(path);
-      setNotice({ kind: "ok", text: out || `${OPS[op].label} complete` });
+      setNotice({ kind: "ok", text: out || t.sync.complete(OPS[op].label) });
       if (op !== "push" && op !== "force") setManualFetchError(null);
       auto.resume(); // the remote works and credentials are fine
     } catch (e) {
@@ -143,7 +144,7 @@ export default function SyncBar({
     setNotice(null);
     try {
       const out = await gitPull(path);
-      setNotice({ kind: "ok", text: out || "Pull complete" });
+      setNotice({ kind: "ok", text: out || t.sync.pullComplete });
       setManualFetchError(null); // a pull fetches first
       auto.resume();
     } catch (e) {
@@ -166,7 +167,7 @@ export default function SyncBar({
     setNotice(null);
     try {
       const out = await gitPullWith(path, mode);
-      setNotice({ kind: "ok", text: out || "Pull complete" });
+      setNotice({ kind: "ok", text: out || t.sync.pullComplete });
       auto.resume();
     } catch (e) {
       setNotice({ kind: "error", text: String(e) });
@@ -178,20 +179,8 @@ export default function SyncBar({
 
   const forcePush = async () => {
     if (!status?.upstream) return;
-    const behind = status.behind;
-    const message = [
-      `Force push "${status.branch}" to ${status.upstream}?`,
-      "",
-      "This overwrites the remote branch with your local history.",
-      behind > 0
-        ? `${behind} commit${behind === 1 ? "" : "s"} on ${status.upstream} that are not in your branch will be discarded there.`
-        : "",
-      "",
-      "The push is refused if the remote changed since your last fetch.",
-    ]
-      .filter((line, i, all) => line !== "" || (i > 0 && all[i - 1] !== ""))
-      .join("\n");
-    if (await confirmDialog(message, "Force push", true, "Force push")) await run("force");
+    const message = t.sync.forcePushConfirm(status.branch, status.upstream, status.behind);
+    if (await confirmDialog(message, t.sync.forcePush, true, t.sync.forcePush)) await run("force");
   };
 
   const noRemote = status ? !status.hasRemote : false;
@@ -238,13 +227,13 @@ export default function SyncBar({
 
   const fetchMenuItems: MenuItem[] = [
     {
-      label: "Auto-fetch",
+      label: t.sync.autoFetch,
       checked: autoOn,
-      title: "Fetch in the background while this window is focused",
+      title: t.sync.autoFetchHint,
       onClick: () => setAutoOn(!autoOn),
     },
     ...AUTO_FETCH_CHOICES.map((secs, i) => ({
-      label: `Every ${intervalLabel(secs)}`,
+      label: t.sync.every(intervalLabel(secs)),
       checked: autoSecs === secs,
       disabled: !autoOn,
       separatorBefore: i === 0,
@@ -254,56 +243,56 @@ export default function SyncBar({
 
   // Pull with an explicit strategy, skipping the "diverged" dialog.
   const pullDisabledReason = noRemote
-    ? "No remotes configured"
+    ? t.sync.noRemotes
     : noBranch
-      ? "Check out a branch first"
+      ? t.sync.checkOutBranch
       : !status?.upstream
-        ? "No upstream branch to pull from"
+        ? t.sync.noUpstreamToPull
         : null;
   const pullMenuItems: MenuItem[] = [
     {
-      label: "Pull (merge)",
+      label: t.sync.pullMerge,
       disabled: locked || pullDisabledReason !== null,
       title:
         pullDisabledReason ??
-        `Fetch and merge ${status?.upstream} into this branch. A merge commit is added if both have new commits.`,
+        t.sync.pullMergeHint(status?.upstream),
       onClick: () => pullWith("merge"),
     },
     {
-      label: "Pull (rebase)",
+      label: t.sync.pullRebase,
       disabled: locked || pullDisabledReason !== null,
       title:
         pullDisabledReason ??
-        `Fetch and replay your commits on top of ${status?.upstream}. Your commits get new ids.`,
+        t.sync.pullRebaseHint(status?.upstream),
       onClick: () => pullWith("rebase"),
     },
   ];
 
   const pushMenuItems: MenuItem[] = [
     {
-      label: "Force push",
+      label: t.sync.forcePush,
       danger: true,
       disabled: busy !== null || noRemote || noBranch || !status?.upstream,
       title: noRemote
-        ? "No remotes configured"
+        ? t.sync.noRemotes
         : noBranch
-          ? "Check out a branch first"
+          ? t.sync.checkOutBranch
           : !status?.upstream
-            ? "This branch has not been pushed yet. Use Push first."
-            : `Overwrite ${status.upstream} with your branch (asks first)`,
+            ? t.sync.notPushedYet
+            : t.sync.forcePushHint(status.upstream),
       onClick: forcePush,
     },
   ];
 
   const fetchTitle = noRemote
-    ? "No remotes configured"
-    : "Fetch all remotes" +
+    ? t.sync.noRemotes
+    : t.sync.fetchAll +
       (autoOn
-        ? ` · auto-fetch every ${intervalLabel(autoSecs)}` +
+        ? t.sync.autoFetchEvery(intervalLabel(autoSecs)) +
           (auto.lastFetchedAt
-            ? `, last at ${new Date(auto.lastFetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+            ? t.sync.lastAt(new Date(auto.lastFetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }))
             : "")
-        : " · auto-fetch is off");
+        : t.sync.autoFetchOff);
   const hint = auto.state === "fetching" || auto.state === "auth" || auto.state === "waiting" ? AUTO_STATE_HINT[auto.state] : null;
 
   return (
@@ -314,30 +303,30 @@ export default function SyncBar({
             {hint.icon}
           </span>
         )}
-        {withMenu("fetch", "Auto-fetch settings", btn("fetch", noRemote, fetchTitle))}
+        {withMenu("fetch", t.sync.autoFetchSettings, btn("fetch", noRemote, fetchTitle))}
         {withMenu(
           "pull",
-          "More pull options",
+          t.sync.morePull,
           btn(
             "pull",
             noRemote || noBranch || !status?.upstream,
             !status?.upstream
-              ? "No upstream branch"
+              ? t.sync.noUpstream
               : status.ahead > 0 && status.behind > 0
-                ? `Diverged from ${status.upstream} (↑${status.ahead} ↓${status.behind}): choose merge or rebase`
-                : `Pull (fast-forward) from ${status.upstream}`,
+                ? t.sync.diverged(status.upstream, status.ahead, status.behind)
+                : t.sync.pullFrom(status.upstream),
             status?.behind ? `↓${status.behind}` : undefined,
             pull,
           ),
         )}
         {withMenu(
           "push",
-          "More push options",
+          t.sync.morePush,
           btn(
             "push",
             noRemote || noBranch,
-            status?.upstream ? `Push to ${status.upstream}` : "Publish this branch",
-            status?.upstream ? (status.ahead ? `↑${status.ahead}` : undefined) : "new",
+            status?.upstream ? t.sync.pushTo(status.upstream) : t.sync.publish,
+            status?.upstream ? (status.ahead ? `↑${status.ahead}` : undefined) : t.sync.newBadge,
           ),
         )}
       </div>
@@ -358,7 +347,7 @@ export default function SyncBar({
         />
       )}
       {notice && (
-        <div className={`notice ${notice.kind}`} onClick={() => setNotice(null)} title="Click to dismiss">
+        <div className={`notice ${notice.kind}`} onClick={() => setNotice(null)} title={t.sync.dismiss}>
           <pre>{notice.text}</pre>
         </div>
       )}

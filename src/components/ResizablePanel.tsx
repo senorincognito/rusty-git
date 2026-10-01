@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { t } from "@/i18n";
 import "./ResizablePanel.scss";
 
 const clamp = (w: number, min: number, max: number) =>
@@ -85,12 +86,12 @@ export default function ResizablePanel({
         className={`resize-handle edge-${edge}`}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize panel"
+        aria-label={t.resizePanel.label}
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={width}
         tabIndex={0}
-        title="Drag to resize, double-click to reset"
+        title={t.resizePanel.hint}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { pickFolder } from "@/api/dialog";
 import { getRecentRepos, openRepo, removeRecentRepo, type RepoInfo } from "@/api/repo";
+import { t } from "@/i18n";
 import "./Welcome.scss";
 
 /** Start screen: open a repository from disk or from the recent list. */
@@ -36,15 +37,15 @@ export default function Welcome({ onOpen }: { onOpen: (repo: RepoInfo) => void }
 
   return (
     <div className="welcome">
-      <h1>Rusty Git Client</h1>
+      <h1>{t.welcome.title}</h1>
       <button className="primary" onClick={browse}>
-        Open repository…
+        {t.welcome.open}
       </button>
       {error && <p className="error">{error}</p>}
 
-      <h2>Recent</h2>
+      <h2>{t.welcome.recent}</h2>
       {recents.length === 0 ? (
-        <p className="muted">No recent repositories.</p>
+        <p className="muted">{t.welcome.noRecent}</p>
       ) : (
         <ul className="recents">
           {recents.map((r) => (
@@ -55,7 +56,7 @@ export default function Welcome({ onOpen }: { onOpen: (repo: RepoInfo) => void }
               </button>
               <button
                 className="ghost"
-                title="Remove from list"
+                title={t.welcome.removeRecent}
                 onClick={() => removeRecentRepo(r.path).then(refreshRecents)}
               >
                 ×

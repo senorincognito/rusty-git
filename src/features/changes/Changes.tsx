@@ -15,6 +15,7 @@ import { stashPaths } from "@/api/stash";
 import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
 import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import { t } from "@/i18n";
 import StashDialog from "./StashDialog";
 import "./Changes.scss";
 
@@ -41,7 +42,7 @@ function FileList(props: {
         </span>
         {files.length > 0 && (
           <button className="ghost" onClick={onActionAll}>
-            {actionLabel} all
+            {t.changes.actionAll(actionLabel)}
           </button>
         )}
       </header>
@@ -191,13 +192,12 @@ export default function Changes({
   const discard = async (file: { path: string; kind: ChangeKind }) => {
     const text =
       file.kind === "new"
-        ? `Delete the untracked file "${file.path}"? It is not in git, so it cannot be recovered.`
+        ? t.changes.deleteUntrackedConfirm(file.path)
         : file.kind === "deleted"
-          ? `Restore "${file.path}", which you deleted?`
-          : `Discard your changes to "${file.path}"? They are lost for good (git cannot recover them).${
-              staged.some((f) => f.path === file.path) ? " Changes that are staged stay staged." : ""
-            }`;
-    if (!(await confirmDialog(text, "Discard changes", true, file.kind === "deleted" ? "Restore" : "Discard"))) return;
+          ? t.changes.restoreConfirm(file.path)
+          : t.changes.discardConfirm(file.path, staged.some((f) => f.path === file.path));
+    const ok = file.kind === "deleted" ? t.changes.restoreOk : t.changes.discardOk;
+    if (!(await confirmDialog(text, t.changes.discardTitle, true, ok))) return;
     await run(async () => {
       await discardPaths(path, [file.path]);
       onCommitted(); // reloads everything and closes a diff that is no longer true
@@ -213,24 +213,24 @@ export default function Changes({
   const menuItems = (m: NonNullable<typeof menu>): MenuItem[] => {
     const file = { path: m.path, kind: m.kind };
     const stashItem: MenuItem = {
-      label: "Stash",
+      label: t.changes.stash,
       disabled: busy,
-      title: "Move this file's uncommitted changes (staged and unstaged) into a new stash; everything else stays",
+      title: t.changes.stashFileHint,
       onClick: () => stashFile(file),
     };
     if (m.staged) {
-      return [{ label: "Unstage", disabled: busy, onClick: () => run(() => unstagePaths(path, [m.path])) }, stashItem];
+      return [{ label: t.changes.unstage, disabled: busy, onClick: () => run(() => unstagePaths(path, [m.path])) }, stashItem];
     }
     return [
-      { label: "Stage", disabled: busy, onClick: () => run(() => stagePaths(path, [m.path])) },
+      { label: t.changes.stage, disabled: busy, onClick: () => run(() => stagePaths(path, [m.path])) },
       {
-        label: m.kind === "new" ? "Delete file…" : m.kind === "deleted" ? "Restore file…" : "Discard changes…",
+        label: m.kind === "new" ? t.changes.deleteFile : m.kind === "deleted" ? t.changes.restoreFile : t.changes.discard,
         danger: true,
         disabled: busy || m.kind === "conflicted",
         title:
           m.kind === "conflicted"
-            ? "This file has merge conflicts"
-            : "Throw away your unstaged changes to this file (asks first)",
+            ? t.changes.conflicted
+            : t.changes.discardHint,
         onClick: () => discard(file),
       },
       stashItem,
@@ -252,13 +252,13 @@ export default function Changes({
   return (
     <aside className="changes" style={hidden ? { display: "none" } : undefined}>
       <FileList
-        title="Unstaged"
+        title={t.changes.unstaged}
         files={unstaged}
         selectedPath={selected && !selected.staged ? selected.path : null}
         onSelect={(f) => onSelectFile({ path: f.path, staged: false, status: f.kind })}
         menuPath={menu && !menu.staged ? menu.path : null}
         onContextMenu={(f, x, y) => setMenu({ x, y, path: f.path, kind: f.kind, staged: false })}
-        actionLabel="Stage"
+        actionLabel={t.changes.stage}
         onAction={(p) => run(() => stagePaths(path, p))}
         onActionAll={() =>
           run(() =>
@@ -270,13 +270,13 @@ export default function Changes({
         }
       />
       <FileList
-        title="Staged"
+        title={t.changes.staged}
         files={staged}
         selectedPath={selected?.staged ? selected.path : null}
         onSelect={(f) => onSelectFile({ path: f.path, staged: true, status: f.kind })}
         menuPath={menu?.staged ? menu.path : null}
         onContextMenu={(f, x, y) => setMenu({ x, y, path: f.path, kind: f.kind, staged: true })}
-        actionLabel="Unstage"
+        actionLabel={t.changes.unstage}
         onAction={(p) => run(() => unstagePaths(path, p))}
         onActionAll={() =>
           run(() =>
@@ -293,8 +293,8 @@ export default function Changes({
             className={"switch" + (!head || busy ? " disabled" : "")}
             title={
               head
-                ? `Replace the last commit (${head.shortId}) instead of creating a new one`
-                : "There is no commit to amend yet"
+                ? t.changes.amendHint(head.shortId)
+                : t.changes.nothingToAmend
             }
           >
             <input
@@ -305,16 +305,16 @@ export default function Changes({
               onChange={(e) => toggleAmend(e.target.checked)}
             />
             <span className="switch-track" aria-hidden="true" />
-            <span>Amend previous commit</span>
+            <span>{t.changes.amend}</span>
           </label>
         </div>
         {amend && head?.pushed && (
           <p className="warn">
-            This commit is already pushed. Amending it rewrites history, so it will need a force push.
+            {t.changes.amendPushed}
           </p>
         )}
         <textarea
-          placeholder="Commit message"
+          placeholder={t.changes.messagePlaceholder}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={(e) => {
@@ -328,13 +328,13 @@ export default function Changes({
             className="secondary"
             disabled={busy || changes.length === 0}
             onClick={() => setStashOpen(true)}
-            title="Move all uncommitted changes, including untracked files, into a stash"
+            title={t.changes.stashAllHint}
           >
-            Stash…
+            {t.changes.stashAll}
           </button>
           <button className="primary" disabled={!canCommit} onClick={commit}>
-            {amend ? "Amend commit" : "Commit"}
-            {staged.length > 0 ? ` (${staged.length})` : ""}
+            {amend ? t.changes.amendCommit : t.changes.commit}
+            {staged.length > 0 ? t.changes.count(staged.length) : ""}
           </button>
         </div>
       </div>

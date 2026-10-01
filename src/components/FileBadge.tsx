@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import "./FileBadge.scss";
 
 export type FileStatus =
@@ -19,20 +20,10 @@ const LETTER: Record<FileStatus, string> = {
   copied: "C",
 };
 
-const NAME: Record<FileStatus, string> = {
-  new: "Added",
-  modified: "Modified",
-  deleted: "Deleted",
-  typechange: "Type changed",
-  conflicted: "Conflicted",
-  renamed: "Renamed",
-  copied: "Copied",
-};
-
 /** One-letter, colour-coded marker for a file's change status. */
 export default function FileBadge({ kind }: { kind: FileStatus }) {
   return (
-    <span className={`badge ${kind}`} title={NAME[kind]}>
+    <span className={`badge ${kind}`} title={t.fileStatus[kind]}>
       {LETTER[kind]}
     </span>
   );

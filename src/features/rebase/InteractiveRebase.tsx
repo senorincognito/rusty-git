@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { getRebasePlan, rewordCommits, type RebaseCommit, type RebasePlan } from "@/api/history";
 import Modal from "@/components/Modal";
+import { fill, t } from "@/i18n";
 import "./InteractiveRebase.scss";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const summaryOf = (message: string) => message.split("\n", 1)[0];
 
 type Action = "pick" | "reword";
 
 const ACTIONS: { value: Action; label: string; title: string }[] = [
-  { value: "pick", label: "pick", title: "Keep the commit as it is" },
-  { value: "reword", label: "reword", title: "Keep the commit but change its message" },
+  { value: "pick", label: t.rebase.pick, title: t.rebase.pickHint },
+  { value: "reword", label: t.rebase.reword, title: t.rebase.rewordHint },
 ];
 
 /**
@@ -105,7 +105,7 @@ export default function InteractiveRebase({
 
   const cancelButton = (
     <button className="secondary" onClick={onCancel} disabled={busy}>
-      Cancel rebase
+      {t.rebase.cancel}
     </button>
   );
 
@@ -113,17 +113,17 @@ export default function InteractiveRebase({
     <section className="rebaseview">
       <header className="rebasehead">
         <div className="rebasetitle">
-          <strong>Interactive rebase</strong>
+          <strong>{t.rebase.title}</strong>
           <span className="muted">
-            onto <code>{base.shortId}</code>
-            {plan && ` · ${plural(commits.length, "commit")}, newest first`}
+            {fill(t.rebase.onto, { base: <code>{base.shortId}</code> })}
+            {plan && t.rebase.count(commits.length)}
           </span>
         </div>
         {cancelButton}
       </header>
 
       <div className="rebasebody">
-        {!plan && !error && <p className="muted rebase-msg">Loading…</p>}
+        {!plan && !error && <p className="muted rebase-msg">{t.common.loading}</p>}
         <ol className="rebaselist">
           {commits.map((c) => {
             const action: Action = c.id in reworded ? "reword" : "pick";
@@ -134,7 +134,7 @@ export default function InteractiveRebase({
                   className="rebase-action"
                   value={action}
                   disabled={busy}
-                  aria-label={`Action for ${c.shortId}`}
+                  aria-label={t.rebase.actionFor(c.shortId)}
                   title={ACTIONS.find((a) => a.value === action)?.title}
                   onChange={(e) => setAction(c, e.target.value as Action)}
                 >
@@ -150,13 +150,13 @@ export default function InteractiveRebase({
                 </span>
                 {action === "reword" && (
                   <button className="ghost rebase-edit" onClick={() => setEditing(c)} disabled={busy}>
-                    Edit message
+                    {t.rebase.editMessage}
                   </button>
                 )}
-                {c.isMerge && <span className="rebase-tag">merge</span>}
+                {c.isMerge && <span className="rebase-tag">{t.rebase.merge}</span>}
                 {c.pushed && (
-                  <span className="rebase-tag pushed" title="Already pushed: changing it needs a force push">
-                    pushed
+                  <span className="rebase-tag pushed" title={t.rebase.pushedHint}>
+                    {t.rebase.pushed}
                   </span>
                 )}
                 <span className="rebase-author">{c.author}</span>
@@ -167,7 +167,7 @@ export default function InteractiveRebase({
         </ol>
         {plan && (
           <div className="rebasebase">
-            <code>{base.shortId}</code> <span className="muted">base of the rebase, stays as it is</span>
+            <code>{base.shortId}</code> <span className="muted">{t.rebase.base}</span>
           </div>
         )}
       </div>
@@ -176,26 +176,20 @@ export default function InteractiveRebase({
         <div className="rebase-info">
           {error && <p className="error">{error}</p>}
           {!error && rewordCount === 0 && plan && (
-            <p className="muted">Choose an action for the commits you want to change.</p>
+            <p className="muted">{t.rebase.chooseAction}</p>
           )}
           {rewordCount > 0 && (
-            <p className="muted">
-              {plural(rewordCount, "commit")} reworded
-              {rewritten.length > rewordCount &&
-                `; ${plural(rewritten.length - rewordCount, "later commit")} rewritten too (new ids, same content)`}
-              .
-            </p>
+            <p className="muted">{t.rebase.reworded(rewordCount, rewritten.length - rewordCount)}</p>
           )}
           {pushedRewritten > 0 && (
             <p className="warn">
-              {plural(pushedRewritten, "rewritten commit")} {pushedRewritten === 1 ? "is" : "are"} already pushed: this
-              rewrites published history and will need a force push.
+              {t.rebase.pushedWarning(pushedRewritten)}
             </p>
           )}
         </div>
         {cancelButton}
         <button className="primary" onClick={start} disabled={!canStart}>
-          {busy ? "Rebasing…" : "Start rebase"}
+          {busy ? t.rebase.starting : t.rebase.start}
         </button>
       </footer>
 
@@ -244,26 +238,26 @@ function RewordDialog({
   const canUpdate = message.trim() !== "";
 
   return (
-    <Modal title={`Reword ${commit.shortId}`} onClose={onCancel} width={560}>
+    <Modal title={t.rebase.rewordTitle(commit.shortId)} onClose={onCancel} width={560}>
       <textarea
         ref={box}
         className="reword-text"
         value={message}
         rows={8}
-        aria-label="Commit message"
+        aria-label={t.rebase.messageLabel}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canUpdate) onUpdate(message);
         }}
       />
-      {!canUpdate && <p className="error">A commit message can't be empty.</p>}
-      <p className="modal-hint">The new message is used when you start the rebase.</p>
+      {!canUpdate && <p className="error">{t.rebase.emptyMessage}</p>}
+      <p className="modal-hint">{t.rebase.rewordAppliesLater}</p>
       <div className="modal-actions">
         <button className="secondary" onClick={onCancel}>
-          Cancel
+          {t.common.cancel}
         </button>
         <button className="primary" onClick={() => onUpdate(message)} disabled={!canUpdate}>
-          Update message
+          {t.rebase.updateMessage}
         </button>
       </div>
     </Modal>

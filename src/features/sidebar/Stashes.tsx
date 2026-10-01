@@ -6,6 +6,7 @@ import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { matchesFilter } from "./filter";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
+import { t } from "@/i18n";
 
 /**
  * The stashes of the repository, newest first. Clicking one shows its changes in the right panel;
@@ -72,12 +73,10 @@ export default function Stashes({
 
   const drop = async (stash: StashEntry) => {
     const ok = await confirmDialog(
-      `Delete stash@{${stash.index}} "${stash.message}"?
-
-Its changes are not applied, and they are lost: git has no undo for this.`,
-      "Delete stash",
+      t.stashes.deleteConfirm(`stash@{${stash.index}}`, stash.message),
+      t.stashes.delete,
       true,
-      "Delete",
+      t.common.delete,
     );
     if (!ok) return;
     setPopping(true);
@@ -93,10 +92,10 @@ Its changes are not applied, and they are lost: git has no undo for this.`,
   };
 
   return (
-    <Section title="Stashes" count={shown?.length}>
+    <Section title={t.stashes.title} count={shown?.length}>
       {error && <p className="error side-msg">{error}</p>}
-      {stashes?.length === 0 && <p className="muted side-msg">No stashes.</p>}
-      {stashes && stashes.length > 0 && shown?.length === 0 && <p className="muted side-msg">No stash matches the filter.</p>}
+      {stashes?.length === 0 && <p className="muted side-msg">{t.stashes.none}</p>}
+      {stashes && stashes.length > 0 && shown?.length === 0 && <p className="muted side-msg">{t.stashes.noMatch}</p>}
       <ul className="branchlist stashlist">
         {shown?.map((s) => (
           <li
@@ -129,20 +128,20 @@ Its changes are not applied, and they are lost: git has no undo for this.`,
           onClose={closeMenu}
           items={[
             {
-              label: "Pop stash",
+              label: t.stashes.pop,
               disabled: popping || workingChanges > 0,
               title:
                 workingChanges > 0
-                  ? "Commit or stash your uncommitted changes first"
-                  : "Apply this stash to the working directory and remove it from the list",
+                  ? t.stashes.popNeedsClean
+                  : t.stashes.popHint,
               onClick: () => pop(menu.stash),
             },
             {
-              label: "Delete stash",
+              label: t.stashes.delete,
               danger: true,
               disabled: popping,
               separatorBefore: true,
-              title: "Remove this stash without applying it (asks first)",
+              title: t.stashes.deleteHint,
               onClick: () => drop(menu.stash),
             },
           ]}

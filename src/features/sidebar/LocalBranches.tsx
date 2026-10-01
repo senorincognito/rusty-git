@@ -12,6 +12,7 @@ import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import NewBranchForm from "@/features/toolbar/NewBranchForm";
+import { t } from "@/i18n";
 import BranchNameInput from "./BranchNameInput";
 import { matchesFilter } from "./filter";
 
@@ -83,12 +84,8 @@ export default function LocalBranches({
     try {
       const unmerged = await countUnmergedCommits(path, b.name);
       const message =
-        unmerged > 0
-          ? `"${b.name}" has ${unmerged} commit${unmerged === 1 ? "" : "s"} that are not merged into the current branch or pushed to its upstream. They will be hard to recover once the branch is gone.
-
-Delete "${b.name}" anyway?`
-          : `Delete branch "${b.name}"?`;
-      if (!(await confirmDialog(message, "Delete branch", unmerged > 0))) return;
+        unmerged > 0 ? t.localBranches.deleteUnmerged(b.name, unmerged) : t.localBranches.deleteConfirm(b.name);
+      if (!(await confirmDialog(message, t.localBranches.deleteTitle, unmerged > 0))) return;
       await deleteLocalBranch(path, b.name);
       setError(null);
       onChanged();
@@ -103,10 +100,10 @@ Delete "${b.name}" anyway?`
 
   return (
     <Section
-      title="Local branches"
+      title={t.localBranches.title}
       count={shown?.length}
       action={{
-        label: "Branch actions",
+        label: t.localBranches.actions,
         active: sectionMenu !== null,
         onClick: (r) => (sectionMenu ? closeSectionMenu() : setSectionMenu({ x: r.left, y: r.bottom + 4 })),
       }}
@@ -123,14 +120,14 @@ Delete "${b.name}" anyway?`
         />
       )}
       {error && <p className="error side-msg">{error}</p>}
-      {branches?.length === 0 && <p className="muted side-msg">No branches yet.</p>}
-      {branches && branches.length > 0 && shown?.length === 0 && <p className="muted side-msg">No branch matches the filter.</p>}
+      {branches?.length === 0 && <p className="muted side-msg">{t.localBranches.none}</p>}
+      {branches && branches.length > 0 && shown?.length === 0 && <p className="muted side-msg">{t.localBranches.noMatch}</p>}
       <ul className="branchlist">
         {shown?.map((b) => (
           <li
             key={b.name}
             className={(b.isHead ? "current" : "") + (menu?.branch.name === b.name ? " ctx" : "")}
-            title={b.isHead ? `${b.name} (current)` : `Double-click to check out ${b.name}`}
+            title={b.isHead ? t.localBranches.current(b.name) : t.localBranches.checkoutHint(b.name)}
             onDoubleClick={() => editing === null && switchTo(b)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -158,9 +155,9 @@ Delete "${b.name}" anyway?`
           onClose={closeSectionMenu}
           items={[
             {
-              label: "New branch…",
+              label: t.localBranches.newBranch,
               disabled: creating,
-              title: "Create a branch at the current commit and check it out",
+              title: t.localBranches.newBranchHint,
               onClick: () => {
                 setError(null);
                 setCreating(true);
@@ -176,10 +173,10 @@ Delete "${b.name}" anyway?`
           onClose={closeMenu}
           items={[
             {
-              label: "Rename branch",
+              label: t.localBranches.rename,
               disabled: menu.branch.isHead,
               title: menu.branch.isHead
-                ? "The checked-out branch can't be renamed. Switch to another branch first."
+                ? t.localBranches.renameCurrent
                 : undefined,
               onClick: () => {
                 setError(null);
@@ -187,11 +184,11 @@ Delete "${b.name}" anyway?`
               },
             },
             {
-              label: "Delete branch",
+              label: t.localBranches.delete,
               danger: true,
               disabled: menu.branch.isHead,
               title: menu.branch.isHead
-                ? "The checked-out branch can't be deleted. Switch to another branch first."
+                ? t.localBranches.deleteCurrent
                 : undefined,
               onClick: () => deleteBranch(menu.branch),
             },

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "@/api/graph";
 import type { ResetMode } from "@/api/history";
 import ContextMenu from "@/components/ContextMenu";
+import { t } from "@/i18n";
 import "./Graph.scss";
 
 const ROW_H = 28;
@@ -149,11 +150,11 @@ export default function Graph({
   const dropReason = !menu
     ? undefined
     : menu.row.isStash
-      ? "A stash can't be dropped here"
+      ? t.graph.dropStash
       : !menu.row.onHead
-        ? "Only commits on the current branch can be dropped"
+        ? t.graph.dropNotOnBranch
         : menu.row.parents.length === 0
-          ? "The first commit of a branch can't be dropped"
+          ? t.graph.dropFirst
           : undefined;
 
   // An interactive rebase covers the commits after this one on the current branch (the backend also
@@ -161,17 +162,17 @@ export default function Graph({
   const rebaseReason = !menu
     ? undefined
     : menu.row.isStash
-      ? "A stash can't be a rebase base"
+      ? t.graph.rebaseStash
       : !menu.row.onHead
-        ? "Only commits on the current branch can be a rebase base"
+        ? t.graph.rebaseNotOnBranch
         : rows.find((r) => r.onHead && !r.isWip && !r.isStash)?.id === menu.row.id
-          ? "There are no commits after this one"
+          ? t.graph.rebaseNothingAfter
           : undefined;
 
   const laneWidth = Math.min(Math.max(graph?.maxLanes ?? 1, 1), 24) * LANE_W + 4;
 
   if (error) return <p className="error pad">{error}</p>;
-  if (graph && rows.length === 0) return <p className="muted pad">No commits yet.</p>;
+  if (graph && rows.length === 0) return <p className="muted pad">{t.graph.noCommits}</p>;
 
   return (
     <div className="graph" ref={scroller} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
@@ -215,41 +216,41 @@ export default function Graph({
           onClose={closeMenu}
           items={[
             {
-              label: "Rename commit",
+              label: t.graph.rename,
               disabled: !menu.row.onHead,
               title: menu.row.onHead
                 ? undefined
                 : menu.row.isStash
-                  ? "A stash can't be renamed"
-                  : "Only commits on the current branch can be renamed",
+                  ? t.graph.renameStash
+                  : t.graph.renameNotOnBranch,
               onClick: () => onRenameCommit({ id: menu.row.id, shortId: menu.row.shortId }),
             },
             {
-              label: "Interactive rebase…",
+              label: t.graph.rebase,
               disabled: rebaseReason !== undefined,
-              title: rebaseReason ?? "Edit the messages of all commits after this one on the current branch",
+              title: rebaseReason ?? t.graph.rebaseHint,
               onClick: () => onInteractiveRebase({ id: menu.row.id, shortId: menu.row.shortId }),
             },
             {
-              label: "Drop commit",
+              label: t.graph.drop,
               danger: true,
               disabled: dropReason !== undefined,
-              title: dropReason ?? "Remove this commit and its changes from the branch (asks first)",
+              title: dropReason ?? t.graph.dropHint,
               onClick: () => onDropCommit({ id: menu.row.id, shortId: menu.row.shortId }),
             },
             // One group; the three reset modes open to its right.
             {
-              label: "Reset to this commit",
+              label: t.graph.reset,
               separatorBefore: true,
               disabled: menu.row.isStash,
               title: menu.row.isStash
-                ? "A stash can't be a reset target"
-                : "Move the branch to this commit; choose what happens to the staging area and your files",
+                ? t.graph.resetStash
+                : t.graph.resetHint,
               children: (
                 [
-                  ["soft", "Soft – keep changes staged", "Move the branch here; the staging area and your files are not touched (asks first)"],
-                  ["mixed", "Mixed – keep changes unstaged", "Move the branch here and reset the staging area; your files are not touched (asks first)"],
-                  ["hard", "Hard – discard changes", "Move the branch here and reset the staging area and your files; uncommitted changes are lost (asks first)"],
+                  ["soft", t.graph.resetSoft, t.graph.resetSoftHint],
+                  ["mixed", t.graph.resetMixed, t.graph.resetMixedHint],
+                  ["hard", t.graph.resetHard, t.graph.resetHardHint],
                 ] as const
               ).map(([mode, label, title]) => ({
                 label,

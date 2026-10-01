@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { autoFetch } from "@/api/sync";
+import { t } from "@/i18n";
 
 /**
  * - off:      auto-fetch is switched off
@@ -83,11 +84,11 @@ export function useAutoFetch({
         setState("idle");
       } else if (status === "auth") {
         s.authPaused = true;
-        setError(message || "The remote needs you to sign in.");
+        setError(message || t.autoFetch.signIn);
         setState("auth");
       } else {
         s.failures += 1;
-        setError(message || "The remote can't be reached.");
+        setError(message || t.autoFetch.unreachable);
         setState("waiting");
       }
     };

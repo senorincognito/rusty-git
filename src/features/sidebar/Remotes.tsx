@@ -13,11 +13,10 @@ import {
 import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import { t } from "@/i18n";
 import AddRemote from "./AddRemote";
 import BranchNameInput from "./BranchNameInput";
 import { matchesFilter } from "./filter";
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export default function Remotes({
   path,
@@ -82,19 +81,9 @@ export default function Remotes({
     const full = `${remote}/${name}`;
     try {
       const unique = await countUnmergedRemoteCommits(path, remote, name);
-      const warning =
-        unique > 0
-          ? `
-
-${unique} commit${unique === 1 ? "" : "s"} on it exist nowhere else: not in your current branch or any local branch.`
-          : "";
-      const ok = await confirmDialog(
-        `Delete "${full}" from the remote? The branch is removed on the server for everyone who uses it.${warning}`,
-        "Delete remote branch",
-        true,
-      );
+      const ok = await confirmDialog(t.remotes.deleteBranchConfirm(full, unique), t.remotes.deleteBranch, true);
       if (!ok) return;
-      setBusy(`Deleting ${full}…`);
+      setBusy(t.remotes.deleting(full));
       setError(null);
       await deleteRemoteBranch(path, remote, name);
       onChanged();
@@ -110,20 +99,16 @@ ${unique} commit${unique === 1 ? "" : "s"} on it exist nowhere else: not in your
     const to = `${remote}/${newName}`;
     try {
       const ok = await confirmDialog(
-        `Rename "${from}" to "${to}"?
-
-This creates ${to} and deletes ${from} on the server, for everyone who uses it. Local branches that track ${from} will be pointed at the new name.
-
-If somebody pushed to ${from} since your last fetch, the rename is refused.`,
-        "Rename remote branch",
+        t.remotes.renameBranchConfirm(from, to),
+        t.remotes.renameBranch,
         true,
-        "Rename",
+        t.remotes.renameOk,
       );
       if (!ok) {
         setEditing(null);
         return;
       }
-      setBusy(`Renaming ${from}…`);
+      setBusy(t.remotes.renaming(from));
       setError(null);
       await renameRemoteBranch(path, remote, name, newName);
       setEditing(null);
@@ -157,19 +142,9 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
   };
 
   const removeRemote = async (r: RemoteInfo) => {
-    const lines = [
-      `Remove the remote "${r.name}" (${r.url})?`,
-      "",
-      `Only this repository's settings change: the remote and its ${plural(r.branches.length, "remote-tracking branch", "remote-tracking branches")} are removed here. Nothing on the server is touched.`,
-    ];
-    if (r.trackingBranches > 0) {
-      lines.push(
-        "",
-        `${plural(r.trackingBranches, "local branch", "local branches")} track${r.trackingBranches === 1 ? "s" : ""} it and will no longer have an upstream.`,
-      );
-    }
+    const text = t.remotes.removeConfirm(r.name, r.url, r.branches.length, r.trackingBranches);
     try {
-      if (!(await confirmDialog(lines.join("\n"), "Remove remote", true, "Remove"))) return;
+      if (!(await confirmDialog(text, t.remotes.removeTitle, true, t.remotes.removeOk))) return;
       setError(null);
       await deleteRemote(path, r.name);
       onChanged();
@@ -192,10 +167,10 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
 
   return (
     <Section
-      title="Remotes"
+      title={t.remotes.title}
       count={visible?.length}
       action={{
-        label: "Remote actions",
+        label: t.remotes.actions,
         active: sectionMenu !== null,
         onClick: (r) => (sectionMenu ? closeSectionMenu() : setSectionMenu({ x: r.left, y: r.bottom + 4 })),
       }}
@@ -215,7 +190,7 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
         />
       )}
       {remotes && remotes.length > 0 && visible?.length === 0 && (
-        <p className="muted side-msg">No remote branch matches the filter.</p>
+        <p className="muted side-msg">{t.remotes.noMatch}</p>
       )}
       {visible?.map(({ r, branches }) => (
         <div key={r.name} className="remote">
@@ -230,12 +205,12 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
             <span className="rname">
               {r.name}
               {several && r.isTarget && (
-                <span className="rtarget" title="New branches are pushed to this remote">
-                  target
+                <span className="rtarget" title={t.remotes.targetHint}>
+                  {t.remotes.target}
                 </span>
               )}
               {fetchError && (
-                <span className="rwarn" role="img" title={`Fetching failed: ${fetchError}`} aria-label="Fetching failed">
+                <span className="rwarn" role="img" title={t.remotes.fetchFailedHint(fetchError)} aria-label={t.remotes.fetchFailed}>
                   ⚠
                 </span>
               )}
@@ -243,7 +218,7 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
             {editingUrl === r.name ? (
               <BranchNameInput
                 initial={r.url}
-                label="Remote URL"
+                label={t.remotes.urlLabel}
                 onSubmit={(url) => changeUrl(r.name, url)}
                 onCancel={() => setEditingUrl(null)}
               />
@@ -251,7 +226,7 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
               <span className="rurl">{r.url}</span>
             )}
           </div>
-          {branches.length === 0 && r.branches.length === 0 && <p className="muted side-msg">No remote branches yet. Fetch to load them.</p>}
+          {branches.length === 0 && r.branches.length === 0 && <p className="muted side-msg">{t.remotes.noBranches}</p>}
           <ul className="branchlist">
             {branches.map((b) => (
               <li
@@ -284,9 +259,9 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
           onClose={closeSectionMenu}
           items={[
             {
-              label: "Add remote…",
+              label: t.remotes.addRemote,
               disabled: adding || remotes.length === 0,
-              title: remotes.length === 0 ? "Use the form below" : "Add another remote repository",
+              title: remotes.length === 0 ? t.remotes.addRemoteUseForm : t.remotes.addRemoteHint,
               onClick: () => {
                 setError(null);
                 setAdding(true);
@@ -296,9 +271,9 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
             ...(remotes.length > 1
               ? [
                   {
-                    label: "Target remote",
+                    label: t.remotes.targetRemote,
                     separatorBefore: true,
-                    title: "The remote that Push publishes new branches to",
+                    title: t.remotes.targetRemoteHint,
                     children: remotes.map((r) => ({
                       label: r.name,
                       checked: r.isTarget,
@@ -318,26 +293,26 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
           onClose={closeHeadMenu}
           items={[
             {
-              label: "Set as target",
+              label: t.remotes.setTarget,
               disabled: headRemote.isTarget,
               title: headRemote.isTarget
-                ? "New branches are already pushed to this remote"
-                : "Push new branches to this remote (Push on a branch that has no upstream yet)",
+                ? t.remotes.alreadyTarget
+                : t.remotes.setTargetHint,
               onClick: () => makeTarget(headRemote.name),
             },
             {
-              label: "Edit URL",
+              label: t.remotes.editUrl,
               onClick: () => {
                 setError(null);
                 setEditingUrl(headRemote.name);
               },
             },
             {
-              label: "Remove remote",
+              label: t.remotes.remove,
               danger: true,
               separatorBefore: true,
               disabled: busy !== null,
-              title: "Remove it from this repository's settings (nothing on the server is touched; asks first)",
+              title: t.remotes.removeHint,
               onClick: () => removeRemote(headRemote),
             },
           ]}
@@ -350,11 +325,11 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
           onClose={closeMenu}
           items={[
             {
-              label: "Rename remote branch",
+              label: t.remotes.renameBranch,
               disabled: busy !== null || branchRemote.trackedByHead === menu.branch,
               title:
                 branchRemote.trackedByHead === menu.branch
-                  ? "This is the upstream of the checked-out branch. Switch branches first."
+                  ? t.remotes.upstreamOfHead
                   : undefined,
               onClick: () => {
                 setError(null);
@@ -362,12 +337,12 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
               },
             },
             {
-              label: "Delete remote branch",
+              label: t.remotes.deleteBranch,
               danger: true,
               disabled: busy !== null || branchRemote.trackedByHead === menu.branch,
               title:
                 branchRemote.trackedByHead === menu.branch
-                  ? "This is the upstream of the checked-out branch. Switch branches first."
+                  ? t.remotes.upstreamOfHead
                   : undefined,
               onClick: () => deleteBranch(menu.remote, menu.branch),
             },

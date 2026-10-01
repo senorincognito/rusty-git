@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createStash } from "@/api/stash";
 import Modal from "@/components/Modal";
+import { t } from "@/i18n";
 import "./StashDialog.scss";
 
 /** Asks for an optional message, then moves all uncommitted changes into a stash. */
@@ -31,7 +32,7 @@ export default function StashDialog({
   };
 
   return (
-    <Modal title="Stash changes" onClose={onClose} width={460}>
+    <Modal title={t.stashDialog.title} onClose={onClose} width={460}>
       <form
         className="stash-form"
         onSubmit={(e) => {
@@ -39,28 +40,25 @@ export default function StashDialog({
           submit();
         }}
       >
-        <p>
-          {fileCount === 1 ? "The 1 changed file" : `All ${fileCount} changed files`}, including untracked files, will be
-          moved into a new stash and your working directory will be clean.
-        </p>
+        <p>{t.stashDialog.explain(fileCount)}</p>
         <input
           autoFocus
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder="Message (optional)"
+          placeholder={t.stashDialog.messagePlaceholder}
           spellCheck={false}
           autoComplete="off"
-          aria-label="Stash message"
+          aria-label={t.stashDialog.messageLabel}
           disabled={busy}
         />
         {error && <p className="error">{error}</p>}
-        <p className="modal-hint">Select the stash in the graph or the Stashes list and press Pop to bring the changes back.</p>
+        <p className="modal-hint">{t.stashDialog.hint}</p>
         <div className="modal-actions">
           <button type="button" className="secondary" onClick={onClose} disabled={busy}>
-            Cancel
+            {t.common.cancel}
           </button>
           <button type="submit" className="primary" disabled={busy}>
-            Stash
+            {t.stashDialog.submit}
           </button>
         </div>
       </form>

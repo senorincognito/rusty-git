@@ -17,6 +17,7 @@ import Sidebar from "@/features/sidebar/Sidebar";
 import TerminalPanel from "@/features/terminal/TerminalPanel";
 import BranchButton from "@/features/toolbar/BranchButton";
 import SyncBar from "@/features/toolbar/SyncBar";
+import { t } from "@/i18n";
 import { describeReset } from "./describeReset";
 import "./RepoView.scss";
 
@@ -64,32 +65,12 @@ export default function RepoView({
   const dropCommit = async (commit: { id: string; shortId: string }) => {
     try {
       const info = await getDropInfo(path, commit.id);
-      const lines = [
-        `Drop commit ${info.shortId} "${info.summary}"?`,
-        "",
-        "The commit is removed from the current branch, and its changes are removed from your working directory.",
-      ];
-      if (info.laterCommits > 0) {
-        const n = info.laterCommits;
-        lines.push(
-          "",
-          `The ${n} later commit${n === 1 ? "" : "s"} on this branch will be re-created on top of its parent (new ids, same ` +
-            "changes, authors and messages; signatures are not kept). If one of them depends on the dropped commit, the " +
-            "drop is cancelled and nothing is changed.",
-        );
-      }
-      if (info.isMerge) lines.push("", "This is a merge commit: the branch goes back to its first parent.");
-      if (info.pushed || info.laterPushed > 0) {
-        lines.push("", "Part of this history is already pushed. Dropping it rewrites that history, so it will need a force push.");
-      }
-      lines.push("", "Other branches, tags and stashes that point at the old commits keep the old history.");
-      lines.push("", "Git keeps the old commits in its reflog for a while, so they can still be recovered with git reflog.");
-      if (!(await confirmDialog(lines.join("\n"), "Drop commit", true, "Drop commit"))) return;
+      if (!(await confirmDialog(t.repo.dropConfirm(info), t.repo.dropTitle, true, t.repo.dropTitle))) return;
       await dropLatestCommit(path, commit.id);
       closeCommit(); // the dropped commit may be the one shown in the right panel
       reload();
     } catch (e) {
-      await showError(String(e), "Drop commit");
+      await showError(String(e), t.repo.dropTitle);
     }
   };
 
@@ -97,13 +78,13 @@ export default function RepoView({
   const resetCommit = async (commit: { id: string; shortId: string }, mode: ResetMode) => {
     try {
       const info = await getResetInfo(path, commit.id);
-      if (!(await confirmDialog(describeReset(info, mode), `Reset (${mode})`, true, `Reset ${mode}`))) return;
+      if (!(await confirmDialog(describeReset(info, mode), t.repo.resetTitle(mode), true, t.repo.resetOk(mode)))) return;
       await resetToCommit(path, commit.id, mode);
       closeCommit(); // the selected commit may no longer be on the branch
       setOpenWorkingFile(null); // the files may have changed under an open working-tree diff
       reload();
     } catch (e) {
-      await showError(String(e), `Reset (${mode})`);
+      await showError(String(e), t.repo.resetTitle(mode));
     }
   };
 
@@ -144,21 +125,21 @@ export default function RepoView({
     <div className="shell">
       <header className="titlebar">
         <button className="ghost" onClick={onClose}>
-          ← Repositories
+          {t.repo.back}
         </button>
         <strong>{repo.name}</strong>
         <span className="branch">
-          {repo.detached ? "detached @ " : ""}
-          {repo.head ?? "(no commits yet)"}
+          {repo.detached ? t.repo.detached : ""}
+          {repo.head ?? t.repo.noCommits}
         </span>
         <BranchButton path={path} onCreated={reload} />
         <SyncBar path={path} refreshKey={graphKey} onFetchError={setFetchError} />
         <button
           className={"syncbtn termtoggle" + (terminalOpen ? " active" : "")}
           onClick={() => setTerminalOpen((o) => !o)}
-          title="Toggle terminal (Ctrl+`)"
+          title={t.repo.terminalHint}
         >
-          &gt;_ Terminal
+          {t.repo.terminal}
         </button>
       </header>
       <div className="body">
