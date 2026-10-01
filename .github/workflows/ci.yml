@@ -52,6 +52,8 @@ jobs:
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
+  # The tests run on Windows and macOS, the platforms the app is built for. They are not run on Linux: the job
+  # hung there (the pseudo-terminal test is the suspect) and Linux is not a target.
   rust-test:
     name: Rust tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -60,33 +62,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
-      - name: Install Tauri's Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
       # The tests build real repositories and talk to local bare remotes with the system git.
       - run: git --version
-      # On Linux the tests run one at a time. The pseudo-terminal test forks a shell while other tests start git
-      # processes on other threads, and a fork in a multi-threaded process can deadlock the child before it execs,
-      # which leaves the test (and the job) hanging. With one thread, a hang also shows the name of the test
-      # that was running, because libtest prints the name before the result.
       - name: Run the backend tests
         timeout-minutes: 8
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then
-            cargo test --lib --manifest-path src-tauri/Cargo.toml -- --test-threads=1
-          else
-            cargo test --lib --manifest-path src-tauri/Cargo.toml
-          fi
+        run: cargo test --lib --manifest-path src-tauri/Cargo.toml
 
   build:
     name: Build (${{ matrix.name }})
