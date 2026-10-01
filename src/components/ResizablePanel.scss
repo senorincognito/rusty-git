@@ -1,0 +1,55 @@
+@use "@/styles/core" as *;
+
+// A resizable panel owns the width (set inline); its content fills it.
+.resizable {
+  flex: none;
+  position: relative;
+  display: flex;
+  max-width: 40vw; // two panels can never squeeze the graph out
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 6;
+  cursor: col-resize;
+  touch-action: none;
+
+  &.edge-right {
+    right: -3px;
+  }
+
+  &.edge-left {
+    left: -3px;
+  }
+
+  // The thin line that lights up on hover, keyboard focus and while dragging.
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 2px;
+    background: transparent;
+    transition: background 0.12s;
+  }
+
+  &:hover::after,
+  &:focus-visible::after,
+  body.resizing &::after {
+    background: $accent;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+// While dragging: no text selection, and the cursor stays a resize cursor everywhere.
+body.resizing {
+  user-select: none;
+  cursor: col-resize;
+}

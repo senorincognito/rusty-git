@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { pickFolder } from "@/api/dialog";
 import { getRecentRepos, openRepo, removeRecentRepo, type RepoInfo } from "@/api/repo";
+import "./Welcome.scss";
 
 /** Start screen: open a repository from disk or from the recent list. */
 export default function Welcome({ onOpen }: { onOpen: (repo: RepoInfo) => void }) {

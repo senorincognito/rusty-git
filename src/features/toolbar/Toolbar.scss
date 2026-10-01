@@ -1,0 +1,154 @@
+@use "@/styles/core" as *;
+
+// The title-bar button group: [Branch] [Fetch] [Pull] [Push] ([Terminal] is in RepoView.scss).
+
+// Fetch / Pull / Push. The Branch button before it carries the auto margin that pushes the
+// whole group to the right.
+.syncbar {
+  margin-left: 6px;
+  display: flex;
+  gap: 6px;
+}
+
+.syncbtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: $bg;
+  border: 1px solid $border;
+  border-radius: $radius;
+
+  &:hover:not(:disabled) {
+    border-color: $accent;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+// Ahead / behind count on a button.
+.badge-count {
+  padding: 0 6px;
+  border-radius: $radius-md;
+  background: $accent;
+  color: $on-accent;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+// A button with a small arrow attached (and right-click) that opens a menu of related actions.
+.splitbtn {
+  display: flex;
+
+  > .syncbtn:first-child {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+}
+
+.splitarrow {
+  padding: 4px 7px;
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  font-size: 10px;
+}
+
+// Result of a fetch / pull / push, hanging below the title bar.
+.notice {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 12px;
+  z-index: 10;
+  max-width: 520px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px 12px;
+  @include floating($shadow-popover);
+  cursor: pointer;
+
+  pre {
+    margin: 0;
+    font: 12px $font-mono;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  &.error {
+    border-color: $danger;
+
+    pre {
+      color: $danger;
+    }
+  }
+}
+
+// Background-fetch state next to the Fetch button.
+.autofetch {
+  align-self: center;
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: $muted;
+  cursor: default;
+
+  &.fetching {
+    color: $accent;
+    animation: autofetch-spin 1.1s linear infinite;
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  &.auth {
+    color: $danger;
+  }
+
+  &.waiting {
+    color: $warn;
+  }
+}
+
+@keyframes autofetch-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// ---- New-branch button and its name popover ----
+.branchbtn {
+  position: relative;
+  margin-left: auto;
+}
+
+.branchpop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  @include floating($shadow-popover);
+
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: $muted;
+  }
+
+  input {
+    @include text-field;
+  }
+
+  p {
+    margin: 0;
+    font-size: 12px;
+  }
+}

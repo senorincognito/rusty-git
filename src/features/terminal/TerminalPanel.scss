@@ -1,0 +1,50 @@
+@use "@/styles/core" as *;
+
+// Bottom panel with the terminal. Its height is set inline (the user drags the top edge).
+.termpanel {
+  flex: none;
+  position: relative;
+  flex-direction: column;
+  background: $bg;
+  border-top: 1px solid $border;
+}
+
+// Grab area on the top edge for resizing.
+.termresize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+}
+
+.termhead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 12px;
+  background: $panel;
+  @include section-label;
+}
+
+// The repository path: shows its end when it is too long.
+.termpath {
+  flex: 1;
+  min-width: 0;
+  @include truncate;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  direction: rtl;
+  text-align: left;
+}
+
+.termhost {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 8px;
+  overflow: hidden;
+}

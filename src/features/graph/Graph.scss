@@ -1,0 +1,112 @@
+@use "@/styles/core" as *;
+
+.graph {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+// One commit. Rows are absolutely positioned by the virtual list.
+.row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 16px;
+  white-space: nowrap;
+  cursor: default;
+
+  &:hover {
+    background: $hover-tint;
+  }
+
+  // Selected must come after hover, and "menu open on this row" after both.
+  &.selected {
+    background: $accent-tint;
+  }
+
+  &.ctx {
+    background: $press-tint;
+  }
+
+  // The pseudo commit for uncommitted changes.
+  &.wip .summary {
+    font-style: italic;
+    color: $muted;
+  }
+}
+
+// The SVG with this row's piece of the branch lines.
+.lanes {
+  flex: none;
+  margin-left: 8px;
+}
+
+.subject {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Branch, remote, tag and stash labels on a commit.
+.ref {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: $radius-pill;
+  font-size: 11px;
+  font-weight: 600;
+  background: #2f3a4a;
+  color: #9cc4ff;
+
+  &.remote {
+    background: #3a3350;
+    color: #c3adf0;
+  }
+
+  &.tag {
+    background: #4a4030;
+    color: #e0c27a;
+  }
+
+  &.head {
+    background: $accent;
+    color: $on-accent;
+  }
+
+  &.stash {
+    background: #4a3a2a;
+    color: $stash;
+  }
+}
+
+.author,
+.date,
+.sha {
+  flex: none;
+  color: $muted;
+  font-size: 12px;
+}
+
+.author {
+  width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.date {
+  width: 150px;
+}
+
+.sha {
+  width: 56px;
+  font-family: $font-mono;
+}

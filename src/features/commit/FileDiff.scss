@@ -1,0 +1,135 @@
+@use "@/styles/core" as *;
+
+.filediff {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: $bg;
+}
+
+.fd-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: $panel;
+  border-bottom: 1px solid $border;
+}
+
+.fd-path {
+  min-width: 0;
+  @include truncate;
+  font-weight: 600;
+}
+
+.fd-from,
+.fd-commit {
+  flex: none;
+  font-size: 12px;
+  color: $muted;
+}
+
+.fd-commit {
+  font-family: $font-mono;
+  margin-right: auto;
+}
+
+.fd-stats {
+  flex: none;
+  font: 12px $font-mono;
+
+  .add {
+    color: $added;
+  }
+
+  .del {
+    color: $danger;
+  }
+}
+
+.fd-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font: 12.5px $font-code;
+  tab-size: 4;
+}
+
+.fd-list {
+  position: relative;
+}
+
+// One line of the diff. Rows are absolutely positioned by the virtual list.
+.dl {
+  position: absolute;
+  left: 0;
+  display: flex;
+  height: 20px;
+  line-height: 20px;
+  min-width: 100%;
+  width: max-content;
+  white-space: pre;
+
+  // Line-number gutters; --ln (the gutter width) is set inline by the component.
+  .ln {
+    flex: none;
+    width: var(--ln);
+    padding-right: 8px;
+    text-align: right;
+    color: $muted;
+    user-select: none;
+  }
+
+  // The "+" / "-" marker.
+  .mk {
+    flex: none;
+    width: 2ch;
+    text-align: center;
+    user-select: none;
+  }
+
+  .tx {
+    padding: 0 24px 0 4px;
+  }
+
+  &.add {
+    background: $added-tint;
+
+    .ln {
+      background: $added-tint-strong;
+    }
+
+    .mk {
+      color: $added;
+    }
+  }
+
+  &.del {
+    background: $removed-tint;
+
+    .ln {
+      background: $removed-tint-strong;
+    }
+
+    .mk {
+      color: $danger;
+    }
+  }
+
+  &.hunk {
+    background: $info-tint;
+    color: $info;
+
+    .tx {
+      padding-left: 12px;
+    }
+  }
+
+  &.note {
+    color: $muted;
+    font-style: italic;
+  }
+}

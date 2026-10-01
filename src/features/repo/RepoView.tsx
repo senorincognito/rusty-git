@@ -14,6 +14,7 @@ import Sidebar from "@/features/sidebar/Sidebar";
 import TerminalPanel from "@/features/terminal/TerminalPanel";
 import BranchButton from "@/features/toolbar/BranchButton";
 import SyncBar from "@/features/toolbar/SyncBar";
+import "./RepoView.scss";
 
 /** The screen for an open repository: title bar, sidebar, graph, changes and terminal. */
 export default function RepoView({

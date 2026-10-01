@@ -12,6 +12,7 @@ import {
 import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import StashDialog from "./StashDialog";
+import "./Changes.scss";
 
 function FileList(props: {
   title: string;

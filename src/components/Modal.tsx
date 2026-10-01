@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import "./Modal.scss";
 
 /** A centred dialog over a dimmed backdrop. Escape or clicking the backdrop calls `onClose`. */
 export default function Modal({

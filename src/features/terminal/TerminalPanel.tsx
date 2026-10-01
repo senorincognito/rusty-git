@@ -4,6 +4,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { termResize, termStart, termStop, termWrite } from "@/api/terminal";
+import "./TerminalPanel.scss";
 
 const MIN_H = 120;
 let nextSessionId = Date.now();

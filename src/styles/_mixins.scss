@@ -1,0 +1,51 @@
+@use "tokens" as *;
+
+// Small uppercase heading used by list, section and panel headers.
+@mixin section-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: $muted;
+}
+
+// Single-line text that is cut off with an ellipsis.
+@mixin truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Text input / textarea in the dark theme, with the accent border on focus.
+@mixin text-field($padding: 6px 8px) {
+  font: inherit;
+  color: inherit;
+  background: $bg;
+  border: 1px solid $border;
+  border-radius: $radius;
+  padding: $padding;
+
+  &:focus {
+    outline: none;
+    border-color: $accent;
+  }
+}
+
+// Surface of a menu, popover or dialog that floats above the layout.
+@mixin floating($shadow, $radius: $radius) {
+  background: $panel;
+  border: 1px solid $border;
+  border-radius: $radius;
+  box-shadow: $shadow;
+}
+
+// A right-hand panel: fills its resizable shell and sits against the centre column.
+@mixin panel-footprint {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: $panel;
+  border-left: 1px solid $border;
+}

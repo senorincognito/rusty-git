@@ -1,0 +1,27 @@
+@use "@/styles/core" as *;
+
+// Collapsible box in the left panel.
+.sidebox-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid $border;
+  @include section-label;
+  text-align: left;
+
+  &:hover {
+    color: $text;
+  }
+
+  .count {
+    margin-left: auto;
+  }
+}
+
+.chev {
+  width: 10px;
+}

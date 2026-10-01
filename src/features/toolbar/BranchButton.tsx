@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createBranch } from "@/api/branches";
+import "./Toolbar.scss";
 
 export default function BranchButton({
   path,

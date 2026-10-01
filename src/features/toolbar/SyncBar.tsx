@@ -16,6 +16,7 @@ import { useAutoFetch } from "@/hooks/useAutoFetch";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { usePersistentState } from "@/hooks/usePersistentState";
 import PullDialog from "./PullDialog";
+import "./Toolbar.scss";
 
 type Op = "fetch" | "pull" | "push" | "force";
 type MenuKind = "fetch" | "pull" | "push";

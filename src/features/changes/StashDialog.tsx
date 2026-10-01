@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createStash } from "@/api/stash";
 import Modal from "@/components/Modal";
+import "./StashDialog.scss";
 
 /** Asks for an optional message, then moves all uncommitted changes into a stash. */
 export default function StashDialog({

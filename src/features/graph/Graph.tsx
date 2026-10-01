@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "@/api/graph";
 import ContextMenu from "@/components/ContextMenu";
+import "./Graph.scss";
 
 const ROW_H = 28;
 const LANE_W = 16;

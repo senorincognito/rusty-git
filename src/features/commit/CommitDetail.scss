@@ -1,0 +1,70 @@
+@use "@/styles/core" as *;
+
+// Right-hand panel for a selected commit or stash.
+.commitdetail {
+  @include panel-footprint;
+
+  .panel-head code {
+    margin: 0 auto 0 8px;
+  }
+}
+
+// "N file changes in working directory" bar with the way back to them.
+.wd-notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: $accent-tint;
+  border-bottom: 1px solid $accent;
+  font-size: 12px;
+}
+
+.cd-meta {
+  flex: none;
+  max-height: 45%;
+  overflow-y: auto;
+  padding: 12px;
+  border-bottom: 1px solid $border;
+
+  p,
+  pre {
+    margin: 0;
+  }
+}
+
+.cd-summary {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.cd-bodytext {
+  margin-top: 8px;
+  font: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: $muted;
+}
+
+.cd-line {
+  margin-top: 8px;
+  font-size: 12px;
+  color: $muted;
+}
+
+// Action bar at the bottom (Pop for stashes), like the Commit/Stash buttons under the staging lists.
+.cd-footer {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid $border;
+
+  p {
+    margin: 0;
+    font-size: 12px;
+  }
+}

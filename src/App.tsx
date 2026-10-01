@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { RepoInfo } from "@/api/repo";
 import RepoView from "@/features/repo/RepoView";
 import Welcome from "@/features/welcome/Welcome";
-import "./App.css";
+import "./styles/main.scss";
 
 function App() {
   const [repo, setRepo] = useState<RepoInfo | null>(null);

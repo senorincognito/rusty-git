@@ -20,8 +20,8 @@ cargo test --lib --manifest-path src-tauri/Cargo.toml   # all backend tests (nee
 cargo check --manifest-path src-tauri/Cargo.toml     # keep it warning-free
 ```
 
-Before calling work done: `cargo test --lib`, `npx tsc --noEmit`, `npx vite build`, and a CSS brace
-balance check (see Pitfalls). There is no frontend test runner and the UI can't be driven from here, so
+Before calling work done: `cargo test --lib`, `npx tsc --noEmit` and `npx vite build` (which also compiles all the
+SCSS: a malformed rule is a build error). There is no frontend test runner and the UI can't be driven from here, so
 say plainly that UI behaviour is untested in the running app.
 
 ## Architecture
@@ -55,7 +55,8 @@ api/                       one typed wrapper file per backend module
 features/welcome|repo|graph|changes|commit|rename|sidebar|toolbar|terminal/
 components/                generic UI: ContextMenu, Modal, ResizablePanel, Section, FileBadge
 hooks/                     useLatestRequest, usePersistentState, useAutoFetch
-App.css                    the single stylesheet (CSS variables for the dark theme)
+styles/                    global SCSS: tokens, mixins, base, buttons, switch, filelist, panel (see Styles)
+*.scss next to components  each component's own styles, imported by that component
 ```
 
 `RepoView` owns the screen state: `graphKey`, `terminalOpen`, `selectedCommit`, `openFile` (a commit's file),
@@ -183,11 +184,32 @@ app rename so users keep their data. Don't change it casually.
 - Spawned git processes use `CREATE_NO_WINDOW`. Git config has `core.autocrlf=input`; CRLF warnings on
   commit are harmless.
 
-**CSS**
-- A merge once dropped a closing `}` in `App.css`; everything after it silently nested and stopped
-  applying (menus rendered unstyled). Check balance after CSS edits:
-  `node -e 'const s=require("fs").readFileSync("src/App.css","utf8");let d=0;for(const c of s){if(c==="{")d++;if(c==="}")d--;}console.log(d)'`
-  must print `0`.
+**Styles**
+- Styles were one hand-written `App.css`; a merge once dropped a closing `}` and every later rule silently
+  stopped applying. They are SCSS now, so unbalanced braces fail `vite build` / `tauri dev` loudly.
+- The migration to SCSS was verified by compiling the result and comparing it with the old stylesheet per
+  selector (effective declarations with duplicates merged, plus a check that no two equal-specificity rules
+  that can hit one element swapped order), and by injecting a defect to see the comparison catch it. Reuse that
+  approach (postcss is in `node_modules`) for any large style refactor.
+- A latent bug is kept on purpose: `.cd-meta p { margin: 0 }` (specificity 0,1,1) overrides `.cd-line` and
+  `.cd-bodytext` `margin-top: 8px` (0,1,0), so those gaps never applied. Fixing it changes spacing visibly.
+
+## Styles (SCSS)
+
+Vite compiles SCSS (the `sass` package) in dev with hot reload and in `vite build` / `tauri build`; there is no
+separate CSS step.
+
+- **Global** (`src/styles/`, loaded first by `App.tsx` via `main.scss`): `_tokens` (SCSS constants: palette,
+  tints, radii, shadows, fonts), `_mixins` (`section-label`, `truncate`, `text-field`, `floating`,
+  `panel-footprint`), `_core` (forwards both), `_base` (reset, `:root` CSS variables, utilities), `_buttons`,
+  `_switch`, `_filelist`, `_panel` (`.panel-head`). Only these emit CSS globally.
+- **Per component**: a `.scss` next to the component, imported by it (`import "./Graph.scss"`), starting with
+  `@use "@/styles/core" as *;` (the `@/` alias works in Sass through Vite). `Toolbar.scss` serves `SyncBar` and
+  `BranchButton`; `Sidebar.scss` serves everything in `features/sidebar/`.
+- **Theme colours stay CSS custom properties** (`--bg`, `--accent`, ...) so they can change at runtime; the SCSS
+  tokens (`$bg`, `$accent`) just expand to `var(--bg)` etc. Use a token or mixin before inventing a new value.
+- Class names are global (no CSS modules), so keep them specific to their feature. Within a file, keep the order
+  hover, then selected, then "menu open" (`.ctx`): equal-specificity rules rely on source order.
 
 ## Working in this environment (Claude Code on the author's Windows machine)
 

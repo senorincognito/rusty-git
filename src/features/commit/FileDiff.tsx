@@ -3,6 +3,7 @@ import { getFileDiff, getWorkingDiff, type FileDiff as FileDiffData } from "@/ap
 import FileBadge, { type FileStatus } from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { usePersistentState } from "@/hooks/usePersistentState";
+import "./FileDiff.scss";
 
 const ROW_H = 20;
 const OVERSCAN = 20;

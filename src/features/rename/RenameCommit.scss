@@ -1,0 +1,50 @@
+@use "@/styles/core" as *;
+
+// Right-hand panel for editing a commit's message.
+.renamebox {
+  @include panel-footprint;
+}
+
+.renamebody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: $muted;
+  }
+
+  textarea {
+    flex: 1;
+    min-height: 120px;
+    resize: none;
+    @include text-field(8px);
+  }
+
+  p {
+    margin: 0;
+    font-size: 12px;
+  }
+
+  .warn {
+    color: $warn;
+  }
+
+  .note {
+    color: $muted;
+  }
+}
+
+.renamefoot {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid $border;
+}

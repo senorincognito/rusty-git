@@ -1,0 +1,44 @@
+@use "@/styles/core" as *;
+
+// The two commit lists of the "branches have diverged" dialog.
+.div-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $muted;
+  }
+
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-height: 220px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+
+  li {
+    display: flex;
+    gap: 6px;
+    padding: 2px 0;
+    white-space: nowrap;
+
+    code {
+      flex: none;
+      color: $accent;
+    }
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+}

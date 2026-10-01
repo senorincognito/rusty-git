@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getRenameInfo, renameCommitMessage, type RenameInfo } from "@/api/history";
+import "./RenameCommit.scss";
 
 /** Right-hand panel for editing a commit's message. "Update" rewrites the commit. */
 export default function RenameCommit({
@@ -65,7 +66,7 @@ export default function RenameCommit({
         else if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canUpdate) update();
       }}
     >
-      <header className="renamehead">
+      <header className="panel-head">
         <span>Rename commit</span>
         <code>{commit.shortId}</code>
       </header>

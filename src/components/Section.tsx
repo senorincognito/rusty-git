@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import "./Section.scss";
 
 /** A collapsible box with a title and an optional count badge. */
 export default function Section({

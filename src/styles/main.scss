@@ -1,0 +1,8 @@
+// Global styles: the reset, utilities and the widgets several features share.
+// Feature styles live next to their components (Graph.scss, Changes.scss, ...) and are imported
+// by those components, so this file is loaded first and they can build on it.
+@use "base";
+@use "buttons";
+@use "switch";
+@use "filelist";
+@use "panel";

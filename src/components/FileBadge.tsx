@@ -1,3 +1,5 @@
+import "./FileBadge.scss";
+
 export type FileStatus =
   | "new"
   | "modified"

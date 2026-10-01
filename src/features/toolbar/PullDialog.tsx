@@ -1,5 +1,6 @@
 import type { BriefCommit, Divergence } from "@/api/sync";
 import Modal from "@/components/Modal";
+import "./PullDialog.scss";
 
 function CommitList({ title, commits, total }: { title: string; commits: BriefCommit[]; total: number }) {
   return (

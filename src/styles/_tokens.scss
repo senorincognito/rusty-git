@@ -1,0 +1,48 @@
+// Design tokens.
+//
+// The theme colours are CSS custom properties (declared on :root in _base.scss) so they can be
+// switched at runtime; the SCSS names below just point at them. Everything else (fixed colours,
+// translucent overlays, radii, shadows, fonts) is a plain SCSS constant.
+
+// ---- Theme colours (runtime-switchable) ----
+$bg: var(--bg);
+$panel: var(--panel);
+$border: var(--border);
+$text: var(--text);
+$muted: var(--muted);
+$accent: var(--accent);
+$danger: var(--danger);
+
+// ---- Fixed colours ----
+$on-accent: #0e1a19; // text on an accent-coloured background
+$warn: #e0a64a;
+$added: #58c98b;
+$info: #4ea1ff;
+$stash: #f0b07a;
+$type-change: #b583f0;
+$copied: #3fc7c7;
+
+// ---- Translucent overlays ----
+$hover-tint: rgba(255, 255, 255, 0.04); // row under the pointer
+$press-tint: rgba(255, 255, 255, 0.08); // menu item under the pointer, row a menu is open on
+$accent-tint: rgba(63, 167, 160, 0.18); // selected row, notice bar
+$added-tint: rgba(88, 201, 139, 0.14);
+$added-tint-strong: rgba(88, 201, 139, 0.22);
+$removed-tint: rgba(229, 100, 107, 0.14);
+$removed-tint-strong: rgba(229, 100, 107, 0.22);
+$info-tint: rgba(78, 161, 255, 0.1);
+
+// ---- Shape ----
+$radius: 6px;
+$radius-sm: 4px;
+$radius-md: 8px;
+$radius-pill: 10px;
+
+// ---- Elevation ----
+$shadow-popover: 0 6px 20px rgba(0, 0, 0, 0.4);
+$shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.5);
+$shadow-modal: 0 16px 48px rgba(0, 0, 0, 0.55);
+
+// ---- Type ----
+$font-mono: Consolas, monospace;
+$font-code: Consolas, "Cascadia Mono", Menlo, monospace;

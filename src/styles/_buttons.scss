@@ -1,0 +1,49 @@
+@use "tokens" as *;
+
+.primary {
+  background: $accent;
+  border: 0;
+  border-radius: $radius;
+  padding: 8px 16px;
+  color: $on-accent;
+  font-weight: 600;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+.secondary {
+  background: $bg;
+  border: 1px solid $border;
+  border-radius: $radius;
+  padding: 8px 16px;
+
+  &:hover:not(:disabled) {
+    border-color: $accent;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  &.small {
+    padding: 3px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}
+
+// Borderless text button, e.g. "x" or "Stage" inside a row.
+.ghost {
+  background: none;
+  border: 0;
+  padding: 4px 8px;
+  color: $muted;
+
+  &:hover {
+    color: $text;
+  }
+}

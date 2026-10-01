@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import "./ResizablePanel.scss";
 
 const clamp = (w: number, min: number, max: number) =>
   Math.round(Math.min(Math.max(w, min), max));

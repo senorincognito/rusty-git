@@ -2,6 +2,7 @@ import ResizablePanel from "@/components/ResizablePanel";
 import LocalBranches from "./LocalBranches";
 import Remotes from "./Remotes";
 import Stashes from "./Stashes";
+import "./Sidebar.scss";
 
 export default function Sidebar({
   path,

@@ -1,0 +1,68 @@
+@use "@/styles/core" as *;
+
+// The whole repository screen: title bar, three columns, terminal.
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.titlebar {
+  position: relative; // the fetch/pull/push result hangs off it
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: $panel;
+  border-bottom: 1px solid $border;
+}
+
+// Current branch chip.
+.branch {
+  padding: 2px 8px;
+  border-radius: $radius-pill;
+  background: $bg;
+  color: $accent;
+  font-size: 12px;
+}
+
+// Terminal toggle at the right end of the title bar (styled like the toolbar buttons).
+.termtoggle {
+  margin-left: 6px;
+
+  &.active {
+    border-color: $accent;
+    color: $accent;
+  }
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+// Centre column: the graph, or a file diff on top of it.
+.center {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.center-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+
+  // Hidden but still laid out, so the graph keeps its scroll position.
+  &.hidden {
+    position: absolute;
+    inset: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}

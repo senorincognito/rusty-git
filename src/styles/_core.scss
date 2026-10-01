@@ -1,0 +1,4 @@
+// What every component stylesheet starts with: `@use "@/styles/core" as *;`
+// gives it the design tokens and the shared mixins.
+@forward "tokens";
+@forward "mixins";

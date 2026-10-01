@@ -157,10 +157,13 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 Requirements: Node.js, Rust (stable, MSVC toolchain on Windows), and on Windows the
 Visual Studio C++ Build Tools. WebView2 ships with Windows 11.
 
+Styles are written in SCSS and compiled by Vite (hot reload in `tauri dev`, part of `npm run build`), so there
+is no separate CSS build step.
+
 ```sh
 npm install
 npm run tauri dev      # run the app with hot reload
-npm run build          # typecheck and build the frontend
+npm run build          # typecheck, compile the SCSS and build the frontend
 cargo test --manifest-path src-tauri/Cargo.toml   # backend tests
 ```
 
@@ -247,4 +250,5 @@ Frontend (`src/`). `@/` is an alias for `src/` (see `tsconfig.json` and `vite.co
 | `features/terminal/` | xterm.js terminal panel |
 | `components/` | Generic UI with no git knowledge: context menu, resizable panel, collapsible section |
 | `hooks/` | Shared hooks, e.g. `useLatestRequest` (ignore out-of-order async responses) |
+| `styles/` | Global SCSS: design tokens, mixins, base styles and shared widgets. Each component's own styles are a `.scss` file next to it |
 | `App.tsx` | Switches between the start screen and the repo view |

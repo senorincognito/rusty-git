@@ -1,0 +1,60 @@
+@use "tokens" as *;
+
+// Theme colours as custom properties, so they can be changed at runtime. The SCSS tokens
+// ($bg, $accent, ...) point at these.
+:root {
+  --bg: #1b1d23;
+  --panel: #23262e;
+  --border: #323642;
+  --text: #e4e6eb;
+  --muted: #8b90a0;
+  --accent: #3fa7a0;
+  --danger: #e5646b;
+
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: $text;
+  background: $bg;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+// ---- Small utilities ----
+.muted {
+  color: $muted;
+}
+
+.error {
+  color: $danger;
+}
+
+.pad {
+  padding: 24px;
+}
+
+// A line of explanatory or error text inside a sidebar section or detail panel.
+.side-msg {
+  margin: 0;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+// Round count badge next to a heading.
+.count {
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: $radius-md;
+  background: $bg;
+}

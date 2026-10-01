@@ -4,6 +4,7 @@ import { popStash } from "@/api/stash";
 import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
+import "./CommitDetail.scss";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
@@ -74,7 +75,7 @@ export default function CommitDetail({
           </button>
         </div>
       )}
-      <header className="renamehead">
+      <header className="panel-head">
         <span>Commit</span>
         <code>{commit.shortId}</code>
         <button className="ghost" onClick={onClose} title="Close commit details">

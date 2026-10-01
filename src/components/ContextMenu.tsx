@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import "./ContextMenu.scss";
 
 export interface MenuItem {
   label: string;

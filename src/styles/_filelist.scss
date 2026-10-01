@@ -1,0 +1,70 @@
+@use "core" as *;
+
+// A titled list of files, used for the staging lists and for a commit's changed files.
+.filelist {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid $border;
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    @include section-label;
+  }
+
+  ul {
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-y: auto;
+  }
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 12px;
+
+    &:hover {
+      background: $hover-tint;
+    }
+
+    // Row actions (Stage / Unstage) only show while the row is hovered.
+    .ghost {
+      visibility: hidden;
+      font-size: 12px;
+    }
+
+    &:hover .ghost {
+      visibility: visible;
+    }
+
+    &.selectable {
+      cursor: pointer;
+    }
+
+    // Must come after the hover rule so a selected row keeps its highlight under the pointer.
+    &.selected {
+      background: $accent-tint;
+    }
+
+    &.selectable:focus-visible {
+      outline: 1px solid $accent;
+      outline-offset: -1px;
+    }
+  }
+}
+
+// A file path that stays readable when it is too long: the start is cut off, the file name stays.
+.fname {
+  flex: 1;
+  min-width: 0;
+  @include truncate;
+  direction: rtl;
+  text-align: left;
+}

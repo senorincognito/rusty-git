@@ -1,0 +1,49 @@
+@use "@/styles/core" as *;
+
+.ctxmenu {
+  position: fixed;
+  z-index: 100;
+  min-width: 170px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  @include floating($shadow-menu);
+}
+
+.ctxitem {
+  padding: 6px 10px;
+  background: none;
+  border: 0;
+  border-radius: $radius-sm;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover:not(:disabled) {
+    background: $press-tint;
+  }
+
+  &.danger:not(:disabled) {
+    color: $danger;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+// Check-mark gutter for toggle and radio items.
+.ctxcheck {
+  flex: none;
+  width: 14px;
+  color: $accent;
+  font-size: 12px;
+}
+
+.ctxsep {
+  height: 1px;
+  margin: 4px 2px;
+  background: $border;
+}
