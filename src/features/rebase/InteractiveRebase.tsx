@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { applyRebase, getRebasePlan, type RebaseCommit, type RebasePlan, type RebaseStep } from "@/api/history";
 import ContextMenu from "@/components/ContextMenu";
 import Modal from "@/components/Modal";
+import { followSelection } from "@/hooks/followSelection";
 import { fill, t } from "@/i18n";
 import "./InteractiveRebase.scss";
 
@@ -194,7 +195,7 @@ export default function InteractiveRebase({
   // Keep the selected row in view after the selection or the order changes.
   const list = useRef<HTMLOListElement>(null);
   useEffect(() => {
-    list.current?.querySelector(".rebaserow.selected")?.scrollIntoView({ block: "nearest" });
+    followSelection(list.current, ".rebaserow.selected");
   }, [selectedId, order]);
 
   const setAction = (c: RebaseCommit, action: Action) => {

@@ -131,7 +131,8 @@ app rename so users keep their data. Don't change it casually.
   `.ctxmenu` or `.modal-backdrop` is open, because those handle their own Escape. `FileDiff` is the model.
   Existing shortcuts: Esc (close diff / menus / dialogs / editors), Ctrl+\` terminal (`RepoView`),
   Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles, ↑/↓ in the commit graph (`Graph`, `keyboard` prop: off while a diff, the rename panel or the
-  rebase screen covers it), ↑/↓ (and Ctrl/Cmd+↑/↓ to move) in the
+  rebase screen covers it) and through the right panel's files while a diff is open (`CommitDetail`, `Changes`), all via
+  the `useArrowKeys` hook (plain arrows only; skips fields, menus and dialogs), ↑/↓ (and Ctrl/Cmd+↑/↓ to move) in the
   interactive rebase (`InteractiveRebase`, window-level; skips editable targets, menus, popups and `diffOpen`). Keep the shortcuts table in `FEATURES.md` in sync.
 - **Texts** live in `src/i18n/en.ts`, never inline in components: labels, titles/tooltips, aria-labels, placeholders,
   confirmation texts, notices. Use `t.<section>.<key>` (strings), functions for texts with values (`t.sync.pushTo(upstream)`,
@@ -313,6 +314,7 @@ separate CSS step.
   `BranchButton`; `Sidebar.scss` serves everything in `features/sidebar/`.
 - **Theme colours stay CSS custom properties** (`--bg`, `--accent`, ...) so they can change at runtime; the SCSS
   tokens (`$bg`, `$accent`) just expand to `var(--bg)` etc. Use a token or mixin before inventing a new value.
+- Focusable list rows (`li[tabindex]`) have no focus outline (`_base.scss`): the selection highlight is the indicator.
 - Class names are global (no CSS modules), so keep them specific to their feature. Within a file, keep the order
   hover, then selected, then "menu open" (`.ctx`): equal-specificity rules rely on source order.
 

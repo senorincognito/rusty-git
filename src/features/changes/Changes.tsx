@@ -14,6 +14,8 @@ import { confirmDialog } from "@/api/dialog";
 import { stashPaths } from "@/api/stash";
 import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
 import FileBadge from "@/components/FileBadge";
+import { followSelection } from "@/hooks/followSelection";
+import { useArrowKeys } from "@/hooks/useArrowKeys";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { t } from "@/i18n";
 import StashDialog from "./StashDialog";
@@ -175,6 +177,21 @@ export default function Changes({
     [changes],
   );
 
+  // While a file's diff is open, Up/Down open the file above/below it: the unstaged files, then the staged ones.
+  useArrowKeys(!hidden && selected !== null, (step) => {
+    if (!selected) return false;
+    const all = [...unstaged.map((f) => ({ ...f, staged: false })), ...staged.map((f) => ({ ...f, staged: true }))];
+    const at = all.findIndex((f) => f.path === selected.path && f.staged === selected.staged);
+    if (at < 0) return false;
+    const next = all[at + step];
+    if (next) onSelectFile({ path: next.path, staged: next.staged, status: next.kind });
+    return true;
+  });
+  const root = useRef<HTMLElement>(null);
+  useEffect(() => {
+    followSelection(root.current, ".filelist li.selected");
+  }, [selected]);
+
   const run = async (op: () => Promise<unknown>) => {
     setBusy(true);
     try {
@@ -250,7 +267,7 @@ export default function Changes({
   const canCommit = !busy && message.trim().length > 0 && (amend || staged.length > 0);
 
   return (
-    <aside className="changes" style={hidden ? { display: "none" } : undefined}>
+    <aside className="changes" ref={root} style={hidden ? { display: "none" } : undefined}>
       <FileList
         title={t.changes.unstaged}
         files={unstaged}

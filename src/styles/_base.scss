@@ -58,3 +58,10 @@ button {
   border-radius: $radius-md;
   background: $bg;
 }
+
+// List rows (changed files, stashes, rebase commits) are focusable so Tab, Enter and Space work, but the selection
+// highlight is the indicator: a focus outline as well would be a second, inconsistent border that lags behind the
+// selection (rows differed: the file lists had an accent outline, the others the browser's default).
+li[tabindex]:focus-visible {
+  outline: none;
+}

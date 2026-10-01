@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useArrowKeys } from "@/hooks/useArrowKeys";
 import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "@/api/graph";
 import type { ResetMode } from "@/api/history";
 import ContextMenu from "@/components/ContextMenu";
@@ -142,28 +143,15 @@ export default function Graph({
   const last = Math.min(rows.length, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
 
   // Up/Down move the selection to the row above/below. The uncommitted-changes row counts as selected while no
-  // commit is, so Down leaves it for the first commit. Typing in a field, an open menu or dialog and modifier keys
-  // leave the arrows alone.
-  useEffect(() => {
-    if (!keyboard) return;
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || e.defaultPrevented || e.isComposing) return;
-      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-      const target = e.target as HTMLElement | null;
-      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-      if (document.querySelector(".ctxmenu, .modal-backdrop")) return;
-      const current = selectedId === null ? rows.findIndex((r) => r.isWip) : rows.findIndex((r) => r.id === selectedId);
-      if (current < 0) return; // nothing selected in the graph
-      e.preventDefault(); // keep the list from scrolling by itself
-      const next = current + (e.key === "ArrowUp" ? -1 : 1);
-      const row = rows[next];
-      if (!row) return;
-      if (row.isWip) onSelectWip();
-      else onSelectCommit({ id: row.id, shortId: row.shortId });
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [keyboard, rows, selectedId, onSelectCommit, onSelectWip]);
+  // commit is, so Down leaves it for the first commit.
+  useArrowKeys(keyboard, (step) => {
+    const current = selectedId === null ? rows.findIndex((r) => r.isWip) : rows.findIndex((r) => r.id === selectedId);
+    if (current < 0) return false; // nothing selected in the graph
+    const row = rows[current + step];
+    if (row?.isWip) onSelectWip();
+    else if (row) onSelectCommit({ id: row.id, shortId: row.shortId });
+    return true;
+  });
 
   // Keep the selected row in view when the selection moves (the list is virtualised, so scroll by arithmetic).
   useEffect(() => {

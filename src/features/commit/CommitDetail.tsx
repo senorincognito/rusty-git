@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getCommitDetail, type CommitDetail as CommitDetailData, type CommitFile } from "@/api/commit";
 import { popStash } from "@/api/stash";
 import FileBadge from "@/components/FileBadge";
+import { followSelection } from "@/hooks/followSelection";
+import { useArrowKeys } from "@/hooks/useArrowKeys";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
 import { fill, t } from "@/i18n";
@@ -64,6 +66,20 @@ export default function CommitDetail({
     }
   };
 
+  // While a file's diff is open, Up/Down open the file above/below it.
+  const files = detail?.files ?? [];
+  useArrowKeys(selectedPath !== null, (step) => {
+    const at = files.findIndex((f) => f.path === selectedPath);
+    if (at < 0) return false;
+    const next = files[at + step];
+    if (next) onSelectFile(next);
+    return true;
+  });
+  const list = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    followSelection(list.current, "li.selected");
+  }, [selectedPath]);
+
   return (
     <aside className="commitdetail">
       {workingChanges > 0 && (
@@ -119,7 +135,7 @@ export default function CommitDetail({
               </span>
             </header>
             {detail.files.length === 0 && <p className="muted side-msg">{t.commitDetail.noFiles}</p>}
-            <ul>
+            <ul ref={list}>
               {detail.files.map((f) => (
                 <li
                   key={f.path}
