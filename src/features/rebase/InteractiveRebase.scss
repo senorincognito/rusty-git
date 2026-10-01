@@ -73,6 +73,22 @@
   &.reword {
     border-left-color: $accent;
   }
+
+  // A squashed commit hangs under the one it melds into.
+  &.squash {
+    border-left-color: $warn;
+    color: $muted;
+  }
+
+  // A dropped commit is struck through.
+  &.drop {
+    border-left-color: $danger;
+    color: $muted;
+
+    .rebase-summary {
+      text-decoration: line-through;
+    }
+  }
 }
 
 .rebase-action {
@@ -94,6 +110,19 @@
   .reword & {
     color: $accent;
   }
+}
+
+// "into abc1234" after a squashed commit's message.
+.rebase-into {
+  flex: none;
+  color: $warn;
+  font-size: 12px;
+}
+
+.rebase-gone {
+  flex: none;
+  color: $danger;
+  font-size: 12px;
 }
 
 .rebase-edit {

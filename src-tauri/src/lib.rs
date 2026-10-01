@@ -44,7 +44,7 @@ pub fn run() {
             hunks::unstage_hunk_cmd,
             history::rename_commit_message,
             history::get_rebase_plan,
-            history::reword_commits_cmd,
+            history::apply_rebase_cmd,
             repo::open_repo,
             repo::get_recent_repos,
             repo::remove_recent_repo,

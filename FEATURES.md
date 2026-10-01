@@ -107,11 +107,22 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   `git rebase -i <commit>`. The commit you clicked is the base and stays as it is.
 - Each commit has an action:
   - **pick** keeps the commit as it is (the default);
+  - **squash** melds the commit into the one before it (the next older one in the list; the row shows "into abc1234") and
+    appends its message to that commit's message, separated by a blank line. Several squashes in a row all go into the
+    commit that starts the chain. The result keeps that older commit's author and parents and the content of the newest
+    commit of the group. The oldest commit of the list can't be squashed (nothing before it) and neither can a merge
+    commit; a merge commit can be squashed *into*. Combine it with **reword** on the older commit to set the final message;
+  - **drop** removes the commit and its changes from the branch (the row is struck through). The later commits are
+    replayed on top of the rebuilt history, so they get new content as well as new ids, and your files are reset to the
+    result: **the working directory must be clean**. If a later commit depends on a dropped one (its changes would
+    conflict), the whole rebase is cancelled with nothing changed and the commit and files are named. Merge commits
+    can't be replayed, so a merge commit *after* a dropped commit blocks the rebase (merges before it are fine). A drop
+    can't be combined with a commit squashed into it;
   - **reword** opens a popup with the commit message and **Cancel** / **Update message** (Ctrl/Cmd+Enter). The new
     first line shows in the list, a blue margin marks the commit, and **Edit message** opens the popup again. Choosing
     *pick* again drops the new message.
 - **Start rebase** applies everything at once; **Cancel rebase** (top or bottom, or Esc) leaves without changes.
-- The reworded commits get the new messages and you as committer; every commit after the oldest reworded one is rebuilt
+- Reworded and squashed commits get you as committer; every commit after the oldest change is rebuilt
   with the same content, author and date (new ids). Files, the staging area and other branches are not touched. The
   footer says how many extra commits are rewritten and warns when any of them is already pushed (a force push is then
   needed).

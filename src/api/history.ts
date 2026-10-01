@@ -39,16 +39,24 @@ export interface RebasePlan {
 /** The commits an interactive rebase onto `id` covers (every later commit on the current branch). */
 export const getRebasePlan = (path: string, id: string) => invoke<RebasePlan>("get_rebase_plan", { path, id });
 
+export type RebaseAction = "pick" | "reword" | "squash" | "drop";
+
+export interface RebaseStep {
+  id: string;
+  action: RebaseAction;
+  /** The new message of a "reword". */
+  message?: string;
+}
+
 /**
- * Gives several commits new messages at once and rebuilds the commits after them (same content, new ids).
- * Resolves to the number of commits that changed.
+ * Applies an interactive rebase. A "squash" commit is melded into the commit before it (the next older one)
+ * with its message appended; a "reword" gets a new message; commits without a step are picked. Every commit
+ * after the oldest change is rebuilt and the branch moves. A "drop" removes the commit and its changes: the later
+ * commits are replayed (new ids, new content), which needs a clean working directory and is abandoned, with nothing
+ * changed, if one of them depends on a dropped commit.
  */
-export const rewordCommits = (
-  path: string,
-  baseId: string,
-  headId: string,
-  edits: { id: string; message: string }[],
-) => invoke<number>("reword_commits_cmd", { path, baseId, headId, edits });
+export const applyRebase = (path: string, baseId: string, headId: string, steps: RebaseStep[]) =>
+  invoke<void>("apply_rebase_cmd", { path, baseId, headId, steps });
 
 export interface DropInfo {
   shortId: string;

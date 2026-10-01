@@ -413,17 +413,31 @@ export const en = {
     pickHint: "Keep the commit as it is",
     reword: "reword",
     rewordHint: "Keep the commit but change its message",
+    squash: "squash",
+    squashHint: "Meld the commit into the one before it (the next older one) and append its message",
+    squashOldest: "The oldest commit has no commit before it to squash into",
+    squashMerge: "A merge commit can't be squashed",
+    squashInto: (shortId: string) => `into ${shortId}`,
+    squashIntoDropped: "The commit before it is dropped, so there is nothing to squash into",
+    drop: "drop",
+    dropHint: "Remove the commit and its changes from the branch",
+    dropSquashed: "Commits are squashed into this one: change those first",
+    dropped: "dropped",
+    dropNote: "Dropping replays the later commits and resets your files: the working directory must be clean.",
     actionFor: (shortId: string) => `Action for ${shortId}`,
     editMessage: "Edit message",
     merge: "merge",
     pushed: "pushed",
     pushedHint: "Already pushed: changing it needs a force push",
     base: "base of the rebase, stays as it is",
-    chooseAction: "Choose an action for the commits you want to change.",
-    reworded: (n: number, alsoRewritten: number) =>
-      `${plural(n, "commit")} reworded` +
-      (alsoRewritten > 0 ? `; ${plural(alsoRewritten, "later commit")} rewritten too (new ids, same content)` : "") +
-      ".",
+    chooseAction: "Choose reword, squash or drop for the commits you want to change.",
+    summary: (reworded: number, squashed: number, dropped: number, alsoRewritten: number) =>
+      [
+        ...(reworded > 0 ? [`${plural(reworded, "commit")} reworded`] : []),
+        ...(dropped > 0 ? [`${plural(dropped, "commit")} dropped`] : []),
+        ...(squashed > 0 ? [`${plural(squashed, "commit")} squashed into the commit before`] : []),
+        ...(alsoRewritten > 0 ? [`${plural(alsoRewritten, "later commit")} rewritten too (new ids, same content)`] : []),
+      ].join("; ") + ".",
     pushedWarning: (n: number) =>
       `${plural(n, "rewritten commit")} ${n === 1 ? "is" : "are"} already pushed: this rewrites published history and will need a force push.`,
     rewordTitle: (shortId: string) => `Reword ${shortId}`,

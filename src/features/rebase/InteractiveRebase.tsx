@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getRebasePlan, rewordCommits, type RebaseCommit, type RebasePlan } from "@/api/history";
+import { applyRebase, getRebasePlan, type RebaseCommit, type RebasePlan, type RebaseStep } from "@/api/history";
 import Modal from "@/components/Modal";
 import { fill, t } from "@/i18n";
 import "./InteractiveRebase.scss";
@@ -7,11 +7,13 @@ import "./InteractiveRebase.scss";
 const dateFmt = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
 const summaryOf = (message: string) => message.split("\n", 1)[0];
 
-type Action = "pick" | "reword";
+type Action = "pick" | "reword" | "squash" | "drop";
 
 const ACTIONS: { value: Action; label: string; title: string }[] = [
   { value: "pick", label: t.rebase.pick, title: t.rebase.pickHint },
   { value: "reword", label: t.rebase.reword, title: t.rebase.rewordHint },
+  { value: "squash", label: t.rebase.squash, title: t.rebase.squashHint },
+  { value: "drop", label: t.rebase.drop, title: t.rebase.dropHint },
 ];
 
 /**
@@ -30,8 +32,10 @@ export default function InteractiveRebase({
   onApplied: () => void;
 }) {
   const [plan, setPlan] = useState<RebasePlan | null>(null);
-  // New messages of the commits set to "reword" (every other commit is a "pick").
+  // New messages of the commits set to "reword", and the commits set to "squash" (every other commit is a "pick").
   const [reworded, setReworded] = useState<Record<string, string>>({});
+  const [squashed, setSquashed] = useState<Record<string, true>>({});
+  const [dropped, setDropped] = useState<Record<string, true>>({});
   // The commit whose message is being edited in the popup.
   const [editing, setEditing] = useState<RebaseCommit | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +45,8 @@ export default function InteractiveRebase({
     let stale = false;
     setPlan(null);
     setReworded({});
+    setSquashed({});
+    setDropped({});
     setEditing(null);
     setError(null);
     getRebasePlan(path, base.id)
@@ -66,22 +72,51 @@ export default function InteractiveRebase({
 
   const commits = plan?.commits ?? [];
   const rewordCount = Object.keys(reworded).length;
-  // Everything from the oldest reworded commit up to the tip gets a new id.
-  const oldest = commits.reduce((at, c, i) => (c.id in reworded ? i : at), -1);
+  const squashCount = Object.keys(squashed).length;
+  const dropCount = Object.keys(dropped).length;
+  // The list is newest first, so the commit a squash melds into is the next one down that is not squashed itself.
+  const squashTarget = (index: number) => {
+    let at = index + 1;
+    while (at < commits.length && commits[at].id in squashed) at++;
+    return commits[at];
+  };
+  // The commits that change directly, and (the oldest of them) where the rebuilding starts.
+  const touched = new Set<string>([...Object.keys(reworded), ...Object.keys(dropped)]);
+  let oldest = commits.reduce((at, c, i) => (c.id in reworded || c.id in dropped ? i : at), -1);
+  commits.forEach((c, i) => {
+    if (!(c.id in squashed)) return;
+    touched.add(c.id);
+    const target = squashTarget(i);
+    if (target) {
+      touched.add(target.id);
+      oldest = Math.max(oldest, commits.indexOf(target));
+    }
+  });
+  // Everything from the oldest change up to the tip gets a new id.
   const rewritten = oldest < 0 ? [] : commits.slice(0, oldest + 1);
   const pushedRewritten = rewritten.filter((c) => c.pushed).length;
-  const canStart = !busy && plan !== null && rewordCount > 0;
+  const changeCount = rewordCount + squashCount + dropCount;
+  const canStart = !busy && plan !== null && changeCount > 0;
 
   const setAction = (c: RebaseCommit, action: Action) => {
     if (action === "reword") {
       setEditing(c); // the commit only becomes "reword" once the popup is confirmed
-    } else {
-      setReworded((r) => {
-        const next = { ...r };
-        delete next[c.id];
-        return next;
-      });
+      return;
     }
+    // A commit has exactly one action: clear the others, then set this one.
+    const without = (r: Record<string, true>, on: boolean) => {
+      const next = { ...r };
+      if (on) next[c.id] = true;
+      else delete next[c.id];
+      return next;
+    };
+    setReworded((r) => {
+      const next = { ...r };
+      delete next[c.id];
+      return next;
+    });
+    setSquashed((q) => without(q, action === "squash"));
+    setDropped((d) => without(d, action === "drop"));
   };
 
   const start = async () => {
@@ -89,12 +124,12 @@ export default function InteractiveRebase({
     setBusy(true);
     setError(null);
     try {
-      await rewordCommits(
-        path,
-        base.id,
-        plan.headId,
-        Object.entries(reworded).map(([id, message]) => ({ id, message })),
-      );
+      const steps: RebaseStep[] = [
+        ...Object.entries(reworded).map(([id, message]) => ({ id, action: "reword" as const, message })),
+        ...Object.keys(squashed).map((id) => ({ id, action: "squash" as const })),
+        ...Object.keys(dropped).map((id) => ({ id, action: "drop" as const })),
+      ];
+      await applyRebase(path, base.id, plan.headId, steps);
       onApplied();
     } catch (e) {
       setError(String(e));
@@ -125,9 +160,22 @@ export default function InteractiveRebase({
       <div className="rebasebody">
         {!plan && !error && <p className="muted rebase-msg">{t.common.loading}</p>}
         <ol className="rebaselist">
-          {commits.map((c) => {
-            const action: Action = c.id in reworded ? "reword" : "pick";
+          {commits.map((c, index) => {
+            const action: Action =
+              c.id in dropped ? "drop" : c.id in squashed ? "squash" : c.id in reworded ? "reword" : "pick";
             const message = reworded[c.id] ?? c.message;
+            // A squash needs a commit before it in this rebase, and a merge commit can't be melded away.
+            const olderTarget = commits.slice(index + 1).find((o) => !(o.id in squashed));
+            const squashBlocked =
+              index === commits.length - 1
+                ? t.rebase.squashOldest
+                : c.isMerge
+                  ? t.rebase.squashMerge
+                  : olderTarget && olderTarget.id in dropped
+                    ? t.rebase.squashIntoDropped
+                    : null;
+            // A commit that others are squashed into can't be dropped (the commit just above it is squashed).
+            const dropBlocked = index > 0 && commits[index - 1].id in squashed ? t.rebase.dropSquashed : null;
             return (
               <li key={c.id} className={"rebaserow " + action}>
                 <select
@@ -139,7 +187,20 @@ export default function InteractiveRebase({
                   onChange={(e) => setAction(c, e.target.value as Action)}
                 >
                   {ACTIONS.map((a) => (
-                    <option key={a.value} value={a.value} title={a.title}>
+                    <option
+                      key={a.value}
+                      value={a.value}
+                      disabled={
+                        (a.value === "squash" && squashBlocked !== null) || (a.value === "drop" && dropBlocked !== null)
+                      }
+                      title={
+                        a.value === "squash" && squashBlocked
+                          ? squashBlocked
+                          : a.value === "drop" && dropBlocked
+                            ? dropBlocked
+                            : a.title
+                      }
+                    >
                       {a.label}
                     </option>
                   ))}
@@ -148,6 +209,10 @@ export default function InteractiveRebase({
                 <span className="rebase-summary" title={message}>
                   {summaryOf(message)}
                 </span>
+                {action === "squash" && (
+                  <span className="rebase-into">{t.rebase.squashInto(squashTarget(index)?.shortId ?? "")}</span>
+                )}
+                {action === "drop" && <span className="rebase-gone">{t.rebase.dropped}</span>}
                 {action === "reword" && (
                   <button className="ghost rebase-edit" onClick={() => setEditing(c)} disabled={busy}>
                     {t.rebase.editMessage}
@@ -175,12 +240,13 @@ export default function InteractiveRebase({
       <footer className="rebasefoot">
         <div className="rebase-info">
           {error && <p className="error">{error}</p>}
-          {!error && rewordCount === 0 && plan && (
-            <p className="muted">{t.rebase.chooseAction}</p>
+          {!error && changeCount === 0 && plan && <p className="muted">{t.rebase.chooseAction}</p>}
+          {changeCount > 0 && (
+            <p className="muted">
+              {t.rebase.summary(rewordCount, squashCount, dropCount, rewritten.length - touched.size)}
+            </p>
           )}
-          {rewordCount > 0 && (
-            <p className="muted">{t.rebase.reworded(rewordCount, rewritten.length - rewordCount)}</p>
-          )}
+          {dropCount > 0 && <p className="muted">{t.rebase.dropNote}</p>}
           {pushedRewritten > 0 && (
             <p className="warn">
               {t.rebase.pushedWarning(pushedRewritten)}
@@ -200,6 +266,13 @@ export default function InteractiveRebase({
           onCancel={() => setEditing(null)}
           onUpdate={(message) => {
             const id = editing.id;
+            for (const set of [setSquashed, setDropped]) {
+              set((q) => {
+                const next = { ...q };
+                delete next[id]; // rewording replaces any other action
+                return next;
+              });
+            }
             setReworded((r) => {
               const next = { ...r };
               // Back to the original message: nothing to reword.

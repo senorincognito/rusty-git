@@ -45,7 +45,7 @@ say plainly that UI behaviour is untested in the running app.
 | `changes.rs` | status, stage/unstage, `discard_paths` (whole-file discard), `create_commit` (new or `amend`), `get_head_commit` |
 | `hunks.rs` | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see Product decisions) |
 | `commit_detail.rs` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
-| `history.rs` | `get_rename_info`, `rename_commit_message`, `get_rebase_plan` + `reword_commits_cmd` (interactive rebase, reword only), drop commit; shared `rebuild_with_messages`; `is_pushed` |
+| `history.rs` | `get_rename_info`, `rename_commit_message`, `get_rebase_plan` + `apply_rebase_cmd` (interactive rebase: pick/reword/squash), drop commit; shared `rebuild_with_messages`; `is_pushed` |
 | `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
 | `remotes.rs` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
 | `sync.rs` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
@@ -145,11 +145,19 @@ app rename so users keep their data. Don't change it casually.
   and the centre (`RepoView` wraps both in `.workarea`; they stay mounted, `visibility: hidden` + `inert`, so the graph
   keeps its scroll position); the right panel stays and shows `Changes` (opening a working diff is ignored meanwhile).
   The clicked commit is the base and is not edited; `rebase_plan` lists the commits after it on HEAD's first-parent line
-  (max 500, newest first) plus `headId`. Each row has an action `<select>`: **pick** and **reword** (a `Modal` popup;
-  a commit only becomes "reword" when the popup is confirmed). `reword_commits` rebuilds from the oldest reworded commit
-  with `rebuild_with_messages` (the same code Rename uses; no cherry-picks, trees untouched, so no conflicts and no clean
-  working directory needed) and refuses when HEAD moved since the plan. New actions (squash, drop, reorder) need real
-  replays (see Drop commit) and belong in the same `ACTIONS` list.
+  (max 500, newest first) plus `headId`. Each row has an action `<select>`: **pick**, **reword** (a `Modal` popup;
+  a commit only becomes "reword" when the popup is confirmed), **squash** and **drop**. `apply_rebase` (command `apply_rebase_cmd`,
+  steps `{id, action, message?}`, unlisted commits are picks) groups each squashed commit with the next older non-squashed
+  commit (a chain of squashes all go into the one that starts it), then rebuilds from the oldest changed group: parents of
+  the group's oldest commit, tree of its newest commit, author of the oldest, you as committer, message = the older
+  message + blank line + each squashed message. No cherry-picks (each commit already contains its predecessors), so no
+  conflicts and no clean working directory are needed, and the tip's tree never changes. The oldest commit and merge
+  commits can't be squashed (`RebaseGroup`), nor squashed into a dropped commit; it refuses when HEAD moved since the plan.
+  **Drop** changes content, so from the first dropped group on `replay_group` re-creates each kept commit with
+  `cherrypick_commit` onto the rebuilt parent (a dropped commit maps to its rebuilt parent in `rebuilt`); a conflict
+  abandons everything with the commit and files named, a merge commit after the first drop is refused, the working
+  directory must be clean and a hard reset (not `move_head_to`) finishes. Groups before the first drop still reuse trees.
+  Reorder is not built; it would also be a replay and belongs in the same `ACTIONS` list.
 - **Rename commit** (graph context menu) only for commits on the current branch. Rebuilds the commit and
   every later commit with identical trees/authors/dates, then moves the branch; other branches keep the old
   history. Warns about rewritten descendants and pushed commits.
