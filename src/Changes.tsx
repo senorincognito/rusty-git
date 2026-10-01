@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createCommit,
   getStatus,
@@ -65,13 +65,19 @@ export default function Changes({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const refresh = useCallback(
-    () =>
-      getStatus(path)
-        .then((c) => (setChanges(c), setError(null)))
-        .catch((e) => setError(String(e))),
-    [path],
-  );
+  // Overlapping refreshes can finish out of order; only the latest request may update state.
+  const latest = useRef(0);
+  const refresh = useCallback(async () => {
+    const id = ++latest.current;
+    try {
+      const c = await getStatus(path);
+      if (id !== latest.current) return;
+      setChanges(c);
+      setError(null);
+    } catch (e) {
+      if (id === latest.current) setError(String(e));
+    }
+  }, [path]);
 
   useEffect(() => {
     setMessage("");
