@@ -9,6 +9,8 @@ export interface RefLabel {
 export interface Edge {
   col: number;
   color: number;
+  /** Drawn dashed: the lane from the uncommitted-changes row down to the commit it sits on. */
+  dashed: boolean;
 }
 
 export interface GraphRow {
@@ -24,6 +26,8 @@ export interface GraphRow {
   onHead: boolean;
   /** A stash: drawn as a hollow node hanging off the commit it was made on. */
   isStash: boolean;
+  /** The pseudo commit standing for uncommitted changes (id "WIP"). */
+  isWip: boolean;
   refs: RefLabel[];
   col: number;
   color: number;

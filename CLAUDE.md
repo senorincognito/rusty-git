@@ -125,6 +125,11 @@ app rename so users keep their data. Don't change it casually.
 - **Working-tree diffs** (click a file in Changes): *unstaged* = index vs file on disk (untracked files show as
   all additions), *staged* = HEAD vs index (on an unborn branch everything staged is an addition). Staging
   buttons on a row stop propagation so they don't also open the diff. Committing closes an open working diff.
+- **Uncommitted changes** are a pseudo commit (`WIP_ID` "WIP", `isWip`) inserted by `build_graph` as the first
+  row when HEAD has a commit and `status_of` reports changes: a dashed lane (`Edge.dashed`) leads down to HEAD's
+  commit, so it lands in that commit's lane. Clicking it calls `closeCommit()` (right panel returns to `Changes`);
+  it counts as selected whenever no commit is selected. It has no context menu. File edits aren't watched, so
+  `Graph` also refetches on window focus.
 - **Stash** moves all uncommitted changes, **including untracked files** (not ignored ones), into a stash with an
   optional message (`Stash…` button beside Commit, `StashDialog`). Stashes are visible in the graph (hollow node
   off the base commit, `stash@{n}` chip, row `isStash`) and in a left-panel `Stashes` section; clicking either

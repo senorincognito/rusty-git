@@ -17,7 +17,7 @@ fn err(e: git2::Error) -> String {
     e.message().to_string()
 }
 
-fn status_of(repo: &Repository) -> Result<Vec<FileChange>, String> {
+pub(crate) fn status_of(repo: &Repository) -> Result<Vec<FileChange>, String> {
     let mut opts = StatusOptions::new();
     opts.include_untracked(true)
         .recurse_untracked_dirs(true)

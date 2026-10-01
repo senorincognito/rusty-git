@@ -23,6 +23,10 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   styled separately).
 - Columns for message, author, date and short hash.
 - Virtualised rendering, with history loaded in pages of 1000 as you scroll.
+- While there are uncommitted changes, a dashed "N file changes in working directory" row sits on top
+  of the graph, joined to the commit you are on. Clicking it shows those changes (the staging panel) in
+  the right panel; it is highlighted whenever no commit is selected. The row updates when you come back
+  to the window after editing files elsewhere.
 - Click a row to select it.
 
 ### Creating commits

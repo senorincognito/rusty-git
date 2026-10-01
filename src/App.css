@@ -1441,3 +1441,9 @@ body.resizing {
 .commit-actions .primary {
   flex: 1;
 }
+
+/* The uncommitted-changes pseudo commit at the top of the graph */
+.row.wip .summary {
+  font-style: italic;
+  color: var(--muted);
+}

@@ -4,6 +4,8 @@ use git2::{Oid, Repository, Sort};
 use serde::Serialize;
 
 const COLOR_COUNT: usize = 8;
+/// Id of the pseudo commit that stands for the uncommitted changes.
+pub const WIP_ID: &str = "WIP";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,6 +21,8 @@ pub struct RefLabel {
 pub struct Edge {
     pub col: usize,
     pub color: usize,
+    /// Drawn dashed: the lane that leads from the uncommitted-changes row to the commit it sits on.
+    pub dashed: bool,
 }
 
 #[derive(Serialize)]
@@ -36,6 +40,8 @@ pub struct GraphRow {
     pub on_head: bool,
     /// A stash: drawn as a hollow node hanging off the commit it was made on.
     pub is_stash: bool,
+    /// The pseudo commit for uncommitted changes, shown on top when there are any.
+    pub is_wip: bool,
     pub refs: Vec<RefLabel>,
     pub col: usize,
     pub color: usize,
@@ -60,6 +66,7 @@ pub struct Graph {
 struct Lane {
     oid: Oid,
     color: usize,
+    dashed: bool,
 }
 
 fn collect_refs(repo: &Repository) -> Result<(HashMap<Oid, Vec<RefLabel>>, Vec<Oid>), git2::Error> {
@@ -174,9 +181,38 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
         head_ancestry.insert(head.id());
     }
 
-    let mut rows = Vec::new();
+    let mut rows: Vec<GraphRow> = Vec::new();
     let mut max_lanes = 0usize;
     let mut has_more = false;
+
+    // Uncommitted changes appear as a pseudo commit on top, joined by a dashed lane to the commit
+    // HEAD points at (so it lands in that commit's lane). Not on a branch without commits.
+    if let Some(head) = repo.head().ok().and_then(|h| h.peel_to_commit().ok()) {
+        let changed = crate::changes::status_of(&repo)?.len();
+        if changed > 0 {
+            let color = new_color();
+            lanes.push(Some(Lane { oid: head.id(), color, dashed: true }));
+            max_lanes = 1;
+            rows.push(GraphRow {
+                id: WIP_ID.to_string(),
+                short_id: String::new(),
+                summary: format!("{changed} file change{} in working directory", if changed == 1 { "" } else { "s" }),
+                author: String::new(),
+                email: String::new(),
+                time: 0,
+                parents: vec![head.id().to_string()],
+                on_head: false,
+                is_stash: false,
+                is_wip: true,
+                refs: Vec::new(),
+                col: 0,
+                color,
+                top: Vec::new(),
+                through: Vec::new(),
+                bottom: vec![Edge { col: 0, color, dashed: true }],
+            });
+        }
+    }
 
     for oid in walk {
         let oid = oid.map_err(|e| e.message().to_string())?;
@@ -212,13 +248,13 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
 
         let top: Vec<Edge> = matches
             .iter()
-            .map(|&i| Edge { col: i, color: lanes[i].unwrap().color })
+            .map(|&i| Edge { col: i, color: lanes[i].unwrap().color, dashed: lanes[i].unwrap().dashed })
             .collect();
         let through: Vec<Edge> = lanes
             .iter()
             .enumerate()
             .filter(|(i, l)| l.is_some() && !matches.contains(i))
-            .map(|(i, l)| Edge { col: i, color: l.unwrap().color })
+            .map(|(i, l)| Edge { col: i, color: l.unwrap().color, dashed: l.unwrap().dashed })
             .collect();
         for &i in &matches {
             lanes[i] = None;
@@ -229,18 +265,20 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
             let existing = lanes.iter().position(|l| l.is_some_and(|l| l.oid == pid));
             match (existing, n) {
                 // Parent already has a lane (another branch reaches it): join that lane.
-                (Some(j), _) => bottom.push(Edge { col: j, color: lanes[j].unwrap().color }),
+                (Some(j), _) => {
+                    bottom.push(Edge { col: j, color: lanes[j].unwrap().color, dashed: lanes[j].unwrap().dashed })
+                }
                 // First parent continues in this node's lane.
                 (None, 0) => {
-                    lanes[col] = Some(Lane { oid: pid, color });
-                    bottom.push(Edge { col, color });
+                    lanes[col] = Some(Lane { oid: pid, color, dashed: false });
+                    bottom.push(Edge { col, color, dashed: false });
                 }
                 // Additional parents (merge) open a new lane.
                 (None, _) => {
                     let slot = first_free(&mut lanes);
                     let c = new_color();
-                    lanes[slot] = Some(Lane { oid: pid, color: c });
-                    bottom.push(Edge { col: slot, color: c });
+                    lanes[slot] = Some(Lane { oid: pid, color: c, dashed: false });
+                    bottom.push(Edge { col: slot, color: c, dashed: false });
                 }
             }
         }
@@ -266,6 +304,7 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
             parents: parent_ids.iter().map(|p| p.to_string()).collect(),
             on_head,
             is_stash: stash_ids.contains(&oid),
+            is_wip: false,
             refs: labels.remove(&oid).unwrap_or_default(),
             col,
             color,
@@ -393,6 +432,51 @@ mod tests {
         // The stash sits above the commit it hangs off.
         let pos = |id: Oid| g.rows.iter().position(|r| r.id == id.to_string()).unwrap();
         assert!(pos(stash) < pos(b) && pos(b) < pos(a));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn uncommitted_changes_are_a_pseudo_commit_on_top() {
+        let dir = std::env::temp_dir().join(format!("gc-wip-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+
+        // No commits yet: nothing to attach the pseudo commit to.
+        std::fs::write(dir.join("early.txt"), "x").unwrap();
+        assert!(build_graph(dir.to_str().unwrap(), 100).unwrap().rows.is_empty());
+        std::fs::remove_file(dir.join("early.txt")).unwrap();
+
+        let a = commit(&repo, "a", &[], Some("refs/heads/main"));
+        let b = commit(&repo, "b", &[a], Some("refs/heads/main"));
+        repo.set_head("refs/heads/main").unwrap();
+
+        // A clean working directory has no pseudo commit.
+        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        assert_eq!(g.rows.len(), 2);
+        assert!(g.rows.iter().all(|r| !r.is_wip));
+
+        // One changed file: a row on top, joined by a dashed lane to HEAD's commit.
+        std::fs::write(dir.join("one.txt"), "1").unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        assert_eq!(g.rows.len(), 3);
+        let wip = &g.rows[0];
+        assert!(wip.is_wip && !wip.is_stash && !wip.on_head);
+        assert_eq!((wip.id.as_str(), wip.summary.as_str()), ("WIP", "1 file change in working directory"));
+        assert_eq!(wip.parents, [b.to_string()]);
+        assert!(wip.bottom.len() == 1 && wip.bottom[0].dashed && wip.top.is_empty());
+        let head_row = &g.rows[1];
+        assert_eq!(head_row.id, b.to_string());
+        assert_eq!(head_row.col, wip.col, "the pseudo commit sits in HEAD's lane");
+        assert!(head_row.top.len() == 1 && head_row.top[0].dashed);
+        assert!(head_row.bottom.iter().all(|e| !e.dashed), "the real history below is solid");
+        assert!(g.rows[2].top.iter().all(|e| !e.dashed));
+
+        // More files: the count follows, and the real rows are unaffected.
+        std::fs::write(dir.join("two.txt"), "2").unwrap();
+        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        assert_eq!(g.rows[0].summary, "2 file changes in working directory");
+        assert_eq!(g.rows.iter().filter(|r| r.is_wip).count(), 1);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

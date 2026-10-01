@@ -111,6 +111,10 @@ export default function RepoView({
               refreshKey={graphKey}
               selectedId={selectedCommit?.id ?? null}
               onSelectCommit={selectCommit}
+              onSelectWip={() => {
+                closeCommit(); // back to the working-directory changes in the right panel
+                setRenaming(null);
+              }}
               onRenameCommit={setRenaming}
             />
           </div>

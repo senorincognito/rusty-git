@@ -32,14 +32,16 @@ function RowGraph({ row, width }: { row: GraphRow; width: number }) {
   const mid = ROW_H / 2;
   const cx = x(row.col);
   const line = (e: Edge, d: string, key: string) => (
-    <path key={key} d={d} stroke={color(e.color)} strokeWidth={2} fill="none" />
+    <path key={key} d={d} stroke={color(e.color)} strokeWidth={2} fill="none" strokeDasharray={e.dashed ? "3 3" : undefined} />
   );
   return (
     <svg width={width} height={ROW_H} className="lanes">
       {row.through.map((e, i) => line(e, curve(x(e.col), 0, x(e.col), ROW_H), `t${i}`))}
       {row.top.map((e, i) => line(e, curve(x(e.col), 0, cx, mid), `u${i}`))}
       {row.bottom.map((e, i) => line(e, curve(cx, mid, x(e.col), ROW_H), `b${i}`))}
-      {row.isStash ? (
+      {row.isWip ? (
+        <circle cx={cx} cy={mid} r={NODE_R} fill="var(--bg)" stroke={color(row.color)} strokeWidth={2} strokeDasharray="2 2" />
+      ) : row.isStash ? (
         <circle cx={cx} cy={mid} r={NODE_R} fill="var(--bg)" stroke={color(row.color)} strokeWidth={2} />
       ) : (
         <circle cx={cx} cy={mid} r={NODE_R} fill={color(row.color)} stroke="var(--bg)" strokeWidth={2} />
@@ -61,13 +63,16 @@ export default function Graph({
   refreshKey = 0,
   selectedId,
   onSelectCommit,
+  onSelectWip,
   onRenameCommit,
 }: {
   path: string;
   refreshKey?: number;
-  /** The commit whose details are open, if any. */
+  /** The commit whose details are open, if any (none: the working-directory changes are shown). */
   selectedId: string | null;
   onSelectCommit: (commit: { id: string; shortId: string }) => void;
+  /** The uncommitted-changes row was clicked. */
+  onSelectWip: () => void;
   onRenameCommit: (commit: { id: string; shortId: string }) => void;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
@@ -77,6 +82,7 @@ export default function Graph({
   const [viewH, setViewH] = useState(600);
   const scroller = useRef<HTMLDivElement>(null);
   const loading = useRef(false);
+  const [focusTick, setFocusTick] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; row: GraphRow } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
 
@@ -98,7 +104,14 @@ export default function Graph({
     return () => {
       stale = true;
     };
-  }, [path, limit, refreshKey]);
+  }, [path, limit, refreshKey, focusTick]);
+
+  // Edits made in another program change the uncommitted-changes row (only .git is watched).
+  useEffect(() => {
+    const onFocus = () => setFocusTick((t) => t + 1);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   useEffect(() => {
     const el = scroller.current;
@@ -131,11 +144,17 @@ export default function Graph({
         {rows.slice(first, last).map((row, i) => (
           <div
             key={row.id}
-            className={"row" + (row.id === selectedId ? " selected" : "") + (row.id === menu?.row.id ? " ctx" : "")}
+            className={
+              "row" +
+              (row.isWip ? " wip" : "") +
+              ((row.isWip ? selectedId === null : row.id === selectedId) ? " selected" : "") +
+              (row.id === menu?.row.id ? " ctx" : "")
+            }
             style={{ top: (first + i) * ROW_H, height: ROW_H }}
-            onClick={() => onSelectCommit({ id: row.id, shortId: row.shortId })}
+            onClick={() => (row.isWip ? onSelectWip() : onSelectCommit({ id: row.id, shortId: row.shortId }))}
             onContextMenu={(e) => {
               e.preventDefault();
+              if (row.isWip) return; // nothing to do with the uncommitted changes here
               setMenu({ x: e.clientX, y: e.clientY, row });
             }}
           >
@@ -149,7 +168,7 @@ export default function Graph({
               <span className="summary">{row.summary}</span>
             </div>
             <span className="author">{row.author}</span>
-            <span className="date">{dateFmt.format(new Date(row.time * 1000))}</span>
+            <span className="date">{row.isWip ? "" : dateFmt.format(new Date(row.time * 1000))}</span>
             <span className="sha">{row.shortId}</span>
           </div>
         ))}
