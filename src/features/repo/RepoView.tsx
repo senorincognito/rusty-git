@@ -4,6 +4,7 @@ import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import ResizablePanel from "@/components/ResizablePanel";
 import Changes from "@/features/changes/Changes";
+import CommitDetail from "@/features/commit/CommitDetail";
 import Graph from "@/features/graph/Graph";
 import RenameCommit from "@/features/rename/RenameCommit";
 import Sidebar from "@/features/sidebar/Sidebar";
@@ -24,6 +25,8 @@ export default function RepoView({
   const [graphKey, setGraphKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; shortId: string } | null>(null);
+  // The commit whose files are shown in the right panel (instead of the working-directory changes).
+  const [selectedCommit, setSelectedCommit] = useState<{ id: string; shortId: string } | null>(null);
   const path = repo.path;
 
   // Redraw everything and refresh the branch label (a first commit creates the branch).
@@ -77,7 +80,13 @@ export default function RepoView({
       </header>
       <div className="body">
         <Sidebar path={path} refreshKey={graphKey} onChanged={reload} />
-        <Graph path={path} refreshKey={graphKey} onRenameCommit={setRenaming} />
+        <Graph
+          path={path}
+          refreshKey={graphKey}
+          selectedId={selectedCommit?.id ?? null}
+          onSelectCommit={setSelectedCommit}
+          onRenameCommit={setRenaming}
+        />
         <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
           {renaming && (
             <RenameCommit
@@ -86,11 +95,25 @@ export default function RepoView({
               onClose={() => setRenaming(null)}
               onRenamed={() => {
                 setRenaming(null);
+                setSelectedCommit(null); // renaming gives the commit (and its successors) new ids
                 reload();
               }}
             />
           )}
-          <Changes path={path} refreshKey={graphKey} hidden={renaming !== null} onCommitted={reload} />
+          {!renaming && selectedCommit && (
+            <CommitDetail
+              path={path}
+              commit={selectedCommit}
+              refreshKey={graphKey}
+              onClose={() => setSelectedCommit(null)}
+            />
+          )}
+          <Changes
+            path={path}
+            refreshKey={graphKey}
+            hidden={renaming !== null || selectedCommit !== null}
+            onCommitted={reload}
+          />
         </ResizablePanel>
       </div>
       <TerminalPanel path={path} open={terminalOpen} onClose={() => setTerminalOpen(false)} />

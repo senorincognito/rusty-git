@@ -9,15 +9,8 @@ import {
   type FileChange,
   type HeadCommit,
 } from "@/api/changes";
+import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
-
-const BADGE: Record<ChangeKind, string> = {
-  new: "A",
-  modified: "M",
-  deleted: "D",
-  typechange: "T",
-  conflicted: "!",
-};
 
 function FileList(props: {
   title: string;
@@ -42,7 +35,7 @@ function FileList(props: {
       <ul>
         {files.map((f) => (
           <li key={f.path} title={f.path}>
-            <span className={`badge ${f.kind}`}>{BADGE[f.kind]}</span>
+            <FileBadge kind={f.kind} />
             <span className="fname">{f.path}</span>
             <button className="ghost" onClick={() => onAction([f.path])}>
               {actionLabel}

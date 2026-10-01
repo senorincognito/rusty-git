@@ -1,5 +1,6 @@
 mod branches;
 mod changes;
+mod commit_detail;
 mod graph;
 mod history;
 mod remotes;
@@ -23,6 +24,7 @@ pub fn run() {
             branches::get_local_branches,
             changes::get_head_commit,
             changes::get_status,
+            commit_detail::get_commit_detail,
             changes::stage_paths,
             changes::unstage_paths,
             changes::create_commit,

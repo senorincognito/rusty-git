@@ -55,16 +55,20 @@ const dateFmt = new Intl.DateTimeFormat(undefined, {
 export default function Graph({
   path,
   refreshKey = 0,
+  selectedId,
+  onSelectCommit,
   onRenameCommit,
 }: {
   path: string;
   refreshKey?: number;
+  /** The commit whose details are open, if any. */
+  selectedId: string | null;
+  onSelectCommit: (commit: { id: string; shortId: string }) => void;
   onRenameCommit: (commit: { id: string; shortId: string }) => void;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [limit, setLimit] = useState(PAGE);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewH, setViewH] = useState(600);
   const scroller = useRef<HTMLDivElement>(null);
@@ -76,7 +80,6 @@ export default function Graph({
   useEffect(() => {
     setGraph(null);
     setLimit(PAGE);
-    setSelected(null);
     setMenu(null);
     scroller.current?.scrollTo({ top: 0 });
   }, [path]);
@@ -124,12 +127,11 @@ export default function Graph({
         {rows.slice(first, last).map((row, i) => (
           <div
             key={row.id}
-            className={"row" + (row.id === selected ? " selected" : "")}
+            className={"row" + (row.id === selectedId ? " selected" : "") + (row.id === menu?.row.id ? " ctx" : "")}
             style={{ top: (first + i) * ROW_H, height: ROW_H }}
-            onClick={() => setSelected(row.id)}
+            onClick={() => onSelectCommit({ id: row.id, shortId: row.shortId })}
             onContextMenu={(e) => {
               e.preventDefault();
-              setSelected(row.id);
               setMenu({ x: e.clientX, y: e.clientY, row });
             }}
           >

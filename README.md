@@ -44,6 +44,14 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   HEAD, index and ref changes. File lists also refresh when
   the window regains focus, so edits made in your editor show up.
 
+### Commit details
+- Click a commit in the graph: the right panel switches to that commit's message, author, date,
+  parents and the files it changed (added, modified, deleted, renamed with their old path).
+  Merge commits are shown against their first parent.
+- While you have uncommitted changes, a notice at the top of the panel says how many files
+  changed in the working directory, with a **View changes** button that closes the commit view
+  and returns to the staging panel (your draft commit message is kept). The × does the same.
+
 ### Commit graph context menu
 - Right-click a commit: **Rename commit** opens an editor in the right panel with the full
   message and **Update** / **Cancel** buttons (Esc cancels, Ctrl+Enter updates). Only
