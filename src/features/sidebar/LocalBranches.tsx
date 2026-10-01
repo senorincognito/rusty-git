@@ -11,6 +11,7 @@ import { confirmDialog } from "@/api/dialog";
 import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import NewBranchForm from "@/features/toolbar/NewBranchForm";
 import BranchNameInput from "./BranchNameInput";
 
 export default function LocalBranches({
@@ -55,6 +56,10 @@ export default function LocalBranches({
 
   const [menu, setMenu] = useState<{ x: number; y: number; branch: BranchInfo } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  // The "⋯" menu in the section's headline, and the inline new-branch form it opens.
+  const [sectionMenu, setSectionMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeSectionMenu = useCallback(() => setSectionMenu(null), []);
+  const [creating, setCreating] = useState(false);
   // The branch whose name is being edited inline.
   const [editing, setEditing] = useState<string | null>(null);
 
@@ -92,7 +97,26 @@ Delete "${b.name}" anyway?`
   }, [refresh, refreshKey]);
 
   return (
-    <Section title="Local branches" count={branches?.length}>
+    <Section
+      title="Local branches"
+      count={branches?.length}
+      action={{
+        label: "Branch actions",
+        active: sectionMenu !== null,
+        onClick: (r) => (sectionMenu ? closeSectionMenu() : setSectionMenu({ x: r.left, y: r.bottom + 4 })),
+      }}
+    >
+      {creating && (
+        <NewBranchForm
+          path={path}
+          className="addremote"
+          onCreated={() => {
+            setCreating(false);
+            onChanged();
+          }}
+          onCancel={() => setCreating(false)}
+        />
+      )}
       {error && <p className="error side-msg">{error}</p>}
       {branches?.length === 0 && <p className="muted side-msg">No branches yet.</p>}
       <ul className="branchlist">
@@ -121,6 +145,24 @@ Delete "${b.name}" anyway?`
           </li>
         ))}
       </ul>
+      {sectionMenu && (
+        <ContextMenu
+          x={sectionMenu.x}
+          y={sectionMenu.y}
+          onClose={closeSectionMenu}
+          items={[
+            {
+              label: "New branch…",
+              disabled: creating,
+              title: "Create a branch at the current commit and check it out",
+              onClick: () => {
+                setError(null);
+                setCreating(true);
+              },
+            },
+          ]}
+        />
+      )}
       {menu && (
         <ContextMenu
           x={menu.x}

@@ -150,6 +150,12 @@
     font-size: 12px;
   }
 
+  label {
+    font-size: 12px;
+    font-weight: 600;
+    color: $muted;
+  }
+
   input {
     @include text-field;
   }

@@ -89,6 +89,8 @@ app rename so users keep their data. Don't change it casually.
   helper, SSH agent, config apply; `GIT_TERMINAL_PROMPT=0`, no console window on Windows).
 - **Async UI requests** must ignore out-of-order responses: use `useLatestRequest`
   (`const isCurrent = start(); ...; if (isCurrent()) set(...)`).
+- **Sidebar section headlines** can carry a "⋯" menu (`Section`'s `action` prop): Local branches (*New branch…*, which shows
+  the same `NewBranchForm` the toolbar's Branch button uses, inline) and Remotes. Keep branch creation in that one form.
 - **Popovers/menus** use `ContextMenu` (portal to `<body>`; supports `checked`, `separatorBefore`,
   `danger`, `disabled`+`title`, and groups via `children`: a submenu snapped to the right of the parent item (flips left
   near the window edge), opened by hover with a 120 ms intent delay, click or ArrowRight; Escape/ArrowLeft close only

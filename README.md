@@ -130,6 +130,7 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   checkout: refused if uncommitted changes would be overwritten).
 - **Branch** button: create a branch from the current commit and check it out; the name is
   validated and uncommitted changes carry over.
+  The **⋯** button in the Local branches headline has *New branch…*, which opens the same name form inline.
 - **Remotes**: every remote of the repository with its URL and remote branches. The **⋯** button in the section's headline opens a menu with
   *Add remote…* (a name and URL form; shown right away when there is none yet) and, with several remotes, a *Target
   remote* group to pick the target. Right-click a remote's header for *Set as target*, *Edit URL* (Enter
