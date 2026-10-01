@@ -19,3 +19,7 @@ export const countUnmergedRemoteCommits = (path: string, name: string) =>
 /** Deletes origin/<name> on the server. */
 export const deleteRemoteBranch = (path: string, name: string) =>
   invoke<string>("delete_remote_branch", { path, name });
+
+/** Renames origin/<name> on the server (push the new name, delete the old one). */
+export const renameRemoteBranch = (path: string, name: string, newName: string) =>
+  invoke<string>("rename_remote_branch", { path, name, newName });

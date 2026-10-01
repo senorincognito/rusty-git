@@ -75,10 +75,13 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   validated and uncommitted changes carry over.
 - **Remotes**: shows `origin` with its URL and remote branches. When there is no origin yet,
   a form adds one.
-- **Context menus** on branches: *Delete branch* (disabled for the checked-out branch) and
-  *Delete remote branch* (disabled for the branch the checked-out branch tracks). Both
-  confirm first and warn when commits would exist nowhere else. Remote deletion runs
-  `git push origin --delete`.
+- **Context menus** on branches: *Rename branch* and *Delete branch* (both disabled for the
+  checked-out branch), and *Rename remote branch* and *Delete remote branch* (both disabled for
+  the branch the checked-out branch tracks). Renaming edits the name inline (Enter confirms,
+  Esc cancels). A remote rename asks first, pushes the new name and deletes the old one in one
+  atomic push (refused if somebody pushed to it since your last fetch), and points local
+  branches that tracked it at the new name. Deleting a branch also asks first, and warns when
+  commits would exist nowhere else; remote deletion runs `git push origin --delete`.
 
 ### Fetch, pull and push
 - Title-bar buttons run the system `git`, so your credential helper and SSH setup apply.

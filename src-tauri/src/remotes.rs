@@ -90,6 +90,75 @@ fn delete_remote_branch_checked(repo_path: &str, repo: &Repository, name: &str) 
     crate::sync::run_git(repo_path, &["push", ORIGIN, "--delete", name])
 }
 
+/// Renames `origin/<name>` on the server: pushes the same commit under the new name and deletes
+/// the old one in a single atomic push. The old name is only deleted if it still points where
+/// we last saw it, so commits somebody else pushed meanwhile are not thrown away. Local branches
+/// that tracked the old name are pointed at the new one.
+fn rename_remote_branch_checked(
+    repo_path: &str,
+    repo: &Repository,
+    name: &str,
+    new_name: &str,
+) -> Result<String, String> {
+    let new_name = crate::branches::validate_branch_name(new_name)?;
+    let info = origin_info(repo)?.ok_or("No origin remote configured")?;
+    if !info.branches.iter().any(|b| b == name) {
+        return Err(format!("Remote branch \"{ORIGIN}/{name}\" not found. Fetch and try again."));
+    }
+    if info.tracked_by_head.as_deref() == Some(name) {
+        return Err("This is the upstream of the checked-out branch. Switch branches first.".into());
+    }
+    if new_name == name {
+        return Err("The name is unchanged".into());
+    }
+    if info.branches.iter().any(|b| b == new_name) {
+        return Err(format!("A branch named \"{ORIGIN}/{new_name}\" already exists"));
+    }
+    // "feature" and "feature/x" can't both exist as refs.
+    if info.branches.iter().any(|b| b.starts_with(&format!("{new_name}/")) || new_name.starts_with(&format!("{b}/"))) {
+        return Err(format!("\"{new_name}\" conflicts with an existing branch name on {ORIGIN}"));
+    }
+
+    let tip = repo
+        .find_reference(&format!("refs/remotes/{ORIGIN}/{name}"))
+        .and_then(|r| r.peel_to_commit())
+        .map_err(err)?
+        .id();
+    let lease = format!("--force-with-lease=refs/heads/{name}:{tip}");
+    let create = format!("{tip}:refs/heads/{new_name}");
+    let delete = format!(":refs/heads/{name}");
+    let output = crate::sync::run_git(repo_path, &["push", "--atomic", &lease, ORIGIN, &create, &delete]).or_else(|e| {
+        // Only for servers that can't do atomic pushes (a rejected lease also mentions "atomic",
+        // and must NOT be retried: that would create the new name without removing the old one).
+        if e.to_lowercase().contains("does not support --atomic") {
+            crate::sync::run_git(repo_path, &["push", &lease, ORIGIN, &create, &delete])
+        } else {
+            Err(e)
+        }
+    })?;
+
+    // Local branches that tracked the old name now track the new one.
+    let fresh = Repository::discover(repo_path).map_err(err)?;
+    let mut cfg = fresh.config().map_err(err)?;
+    let old_merge = format!("refs/heads/{name}");
+    let mut repointed = 0;
+    for b in fresh.branches(Some(BranchType::Local)).map_err(err)?.flatten() {
+        let Some(local) = b.0.name().ok().flatten() else { continue };
+        let (remote_key, merge_key) = (format!("branch.{local}.remote"), format!("branch.{local}.merge"));
+        if cfg.get_string(&remote_key).ok().as_deref() == Some(ORIGIN)
+            && cfg.get_string(&merge_key).ok().as_deref() == Some(old_merge.as_str())
+        {
+            cfg.set_str(&merge_key, &format!("refs/heads/{new_name}")).map_err(err)?;
+            repointed += 1;
+        }
+    }
+    Ok(if repointed > 0 {
+        format!("{output}\n{repointed} local branch(es) now track {ORIGIN}/{new_name}.")
+    } else {
+        output
+    })
+}
+
 fn add_origin(repo: &Repository, url: &str) -> Result<(), String> {
     let url = url.trim();
     if url.is_empty() {
@@ -132,6 +201,13 @@ pub async fn count_unmerged_remote_commits(path: String, name: String) -> Result
 pub async fn delete_remote_branch(path: String, name: String) -> Result<String, String> {
     let p = path.clone();
     blocking(path, move |r| delete_remote_branch_checked(&p, r, &name)).await
+}
+
+/// Renames a branch on the origin server (see [`rename_remote_branch_checked`]). Network call.
+#[tauri::command]
+pub async fn rename_remote_branch(path: String, name: String, new_name: String) -> Result<String, String> {
+    let p = path.clone();
+    blocking(path, move |r| rename_remote_branch_checked(&p, r, &name, &new_name)).await
 }
 
 #[tauri::command]
@@ -232,6 +308,65 @@ mod tests {
         assert!(on_server.contains("refs/heads/main") && !on_server.contains("feature"), "{on_server}");
         let info = origin_info(&Repository::open(&a).unwrap()).unwrap().unwrap();
         assert_eq!(info.branches, ["main"]);
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn rename_remote_branch_flow() {
+        let base = std::env::temp_dir().join(format!("gc-renameremote-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let origin = base.join("origin.git");
+        let (a, b) = (base.join("a"), base.join("b"));
+        std::fs::create_dir_all(&a).unwrap();
+        git(&base, &["init", "-q", "--bare", "-b", "main", origin.to_str().unwrap()]);
+        git(&a, &["init", "-q", "-b", "main"]);
+        git(&a, &["remote", "add", "origin", origin.to_str().unwrap()]);
+        let commit = |dir: &std::path::Path, msg: &str| {
+            std::fs::write(dir.join("f.txt"), msg).unwrap();
+            git(dir, &["add", "-A"]);
+            git(dir, &["-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "-m", msg]);
+        };
+        commit(&a, "one");
+        git(&a, &["push", "-q", "-u", "origin", "main"]);
+        git(&a, &["checkout", "-q", "-b", "feature"]);
+        commit(&a, "two");
+        git(&a, &["push", "-q", "origin", "feature"]);
+        git(&a, &["checkout", "-q", "main"]);
+        git(&a, &["branch", "-q", "--track", "track", "origin/feature"]); // a local branch tracking it
+
+        let ap = a.to_str().unwrap();
+        let heads = || git(&a, &["ls-remote", "--heads", "origin"]);
+
+        // Rules, checked before anything is pushed.
+        let repo = Repository::open(&a).unwrap();
+        assert!(rename_remote_branch_checked(ap, &repo, "main", "primary").unwrap_err().contains("upstream"));
+        assert!(rename_remote_branch_checked(ap, &repo, "nope", "x").unwrap_err().contains("not found"));
+        assert!(rename_remote_branch_checked(ap, &repo, "feature", "main").unwrap_err().contains("already exists"));
+        assert!(rename_remote_branch_checked(ap, &repo, "feature", "feature").unwrap_err().contains("unchanged"));
+        assert!(rename_remote_branch_checked(ap, &repo, "feature", "bad name").unwrap_err().contains("not a valid"));
+        assert!(rename_remote_branch_checked(ap, &repo, "feature", "main/x").unwrap_err().contains("conflicts"));
+        assert!(heads().contains("refs/heads/feature"));
+
+        // Rename: new name on the server, old one gone, tracking branches follow.
+        let msg = rename_remote_branch_checked(ap, &repo, "feature", "renamed").unwrap();
+        assert!(msg.contains("1 local branch"), "{msg}");
+        let on_server = heads();
+        assert!(on_server.contains("refs/heads/renamed") && !on_server.contains("refs/heads/feature"), "{on_server}");
+        let info = origin_info(&Repository::open(&a).unwrap()).unwrap().unwrap();
+        assert_eq!(info.branches, ["main", "renamed"]);
+        assert_eq!(git(&a, &["config", "--get", "branch.track.merge"]), "refs/heads/renamed");
+
+        // Somebody else pushes to it; renaming from a stale view must not discard their commit.
+        git(&base, &["clone", "-q", origin.to_str().unwrap(), b.to_str().unwrap()]);
+        git(&b, &["checkout", "-q", "renamed"]);
+        commit(&b, "theirs");
+        git(&b, &["push", "-q"]);
+        let theirs = git(&b, &["rev-parse", "HEAD"]);
+        let repo = Repository::open(&a).unwrap();
+        assert!(rename_remote_branch_checked(ap, &repo, "renamed", "again").is_err());
+        let on_server = heads();
+        assert!(on_server.contains(&theirs) && on_server.contains("refs/heads/renamed") && !on_server.contains("again"), "{on_server}");
 
         let _ = std::fs::remove_dir_all(&base);
     }

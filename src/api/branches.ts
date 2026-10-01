@@ -24,3 +24,7 @@ export const countUnmergedCommits = (path: string, name: string) =>
   invoke<number>("count_unmerged_commits", { path, name });
 export const deleteLocalBranch = (path: string, name: string) =>
   invoke<void>("delete_local_branch", { path, name });
+
+/** Renames a local branch that is not checked out. */
+export const renameLocalBranch = (path: string, name: string, newName: string) =>
+  invoke<void>("rename_local_branch", { path, name, newName });

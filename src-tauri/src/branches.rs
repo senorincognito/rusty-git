@@ -61,9 +61,8 @@ pub async fn get_local_branches(path: String) -> Result<Vec<BranchInfo>, String>
     .map_err(|e| e.to_string())?
 }
 
-/// Creates `name` at the current commit and checks it out, like `git checkout -b`.
-/// The working tree and index are untouched, so uncommitted changes carry over.
-fn create_and_checkout(repo: &Repository, name: &str) -> Result<(), String> {
+/// Trims `name` and checks that it can be used as a branch name.
+pub(crate) fn validate_branch_name(name: &str) -> Result<&str, String> {
     let name = name.trim();
     if name.is_empty() {
         return Err("Enter a branch name".into());
@@ -71,6 +70,53 @@ fn create_and_checkout(repo: &Repository, name: &str) -> Result<(), String> {
     if !Branch::name_is_valid(name).map_err(err)? || name.starts_with('-') {
         return Err(format!("\"{name}\" is not a valid branch name"));
     }
+    Ok(name)
+}
+
+/// Renames a local branch that is not checked out. Its upstream and branch settings move with it.
+fn rename_branch(repo: &Repository, name: &str, new_name: &str) -> Result<(), String> {
+    let new_name = validate_branch_name(new_name)?;
+    let mut branch = repo
+        .find_branch(name, BranchType::Local)
+        .map_err(|_| format!("Branch \"{name}\" not found"))?;
+    if branch.is_head() {
+        return Err("The checked-out branch can't be renamed here. Switch to another branch first.".into());
+    }
+    if new_name == name {
+        return Err("The name is unchanged".into());
+    }
+    // "feature" and "feature/x" can't both exist as refs. Check this up front: libgit2 reports the
+    // clash only after it has already removed the old ref (see the safety net below).
+    for existing in local_branches(repo)? {
+        let clash = existing.name != name
+            && (existing.name.starts_with(&format!("{new_name}/")) || new_name.starts_with(&format!("{}/", existing.name)));
+        if clash {
+            return Err(format!("\"{new_name}\" conflicts with the existing branch \"{}\"", existing.name));
+        }
+    }
+
+    let tip = branch.get().peel_to_commit().map_err(err)?;
+    match branch.rename(new_name, false) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // Safety net: a failed rename must never cost the user their branch. If libgit2 dropped
+            // the old ref on the way to failing, put it back.
+            if repo.find_branch(name, BranchType::Local).is_err() {
+                let _ = repo.branch(name, &tip, false);
+            }
+            if e.code() == git2::ErrorCode::Exists {
+                Err(format!("A branch named \"{new_name}\" already exists"))
+            } else {
+                Err(err(e))
+            }
+        }
+    }
+}
+
+/// Creates `name` at the current commit and checks it out, like `git checkout -b`.
+/// The working tree and index are untouched, so uncommitted changes carry over.
+fn create_and_checkout(repo: &Repository, name: &str) -> Result<(), String> {
+    let name = validate_branch_name(name)?;
     let head = repo
         .head()
         .and_then(|h| h.peel_to_commit())
@@ -88,6 +134,15 @@ fn create_and_checkout(repo: &Repository, name: &str) -> Result<(), String> {
         Err(e) => return Err(err(e)),
     }
     repo.set_head(&format!("refs/heads/{name}")).map_err(err)
+}
+
+#[tauri::command]
+pub async fn rename_local_branch(path: String, name: String, new_name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        rename_branch(&Repository::discover(&path).map_err(err)?, &name, &new_name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -334,6 +389,52 @@ mod tests {
         let names: Vec<_> = local_branches(&repo).unwrap().into_iter().map(|b| b.name).collect();
         assert_eq!(names, ["main"]);
         assert!(delete_branch_checked(&repo, "merged").unwrap_err().contains("not found"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rename_local_branch_rules() {
+        let dir = std::env::temp_dir().join(format!("gc-renamebranch-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let c1 = commit_files(&repo, "refs/heads/main", &[], &[("a.txt", "one")]);
+        repo.set_head("refs/heads/main").unwrap();
+        let commit = repo.find_commit(c1).unwrap();
+        repo.branch("other", &commit, false).unwrap();
+        repo.branch("taken", &commit, false).unwrap();
+        repo.branch("feature/x", &commit, false).unwrap();
+
+        // Give "other" an upstream to see that it moves with the branch.
+        repo.remote("origin", "https://example.com/r.git").unwrap();
+        repo.reference("refs/remotes/origin/other", c1, true, "test").unwrap();
+        repo.find_branch("other", BranchType::Local).unwrap().set_upstream(Some("origin/other")).unwrap();
+
+        // Rules: not the checked-out branch, valid and free names only.
+        assert!(rename_branch(&repo, "main", "primary").unwrap_err().contains("checked-out"));
+        assert!(rename_branch(&repo, "nope", "x").unwrap_err().contains("not found"));
+        assert!(rename_branch(&repo, "other", "taken").unwrap_err().contains("already exists"));
+        assert!(rename_branch(&repo, "other", "other").unwrap_err().contains("unchanged"));
+        assert!(rename_branch(&repo, "other", "  ").is_err());
+        for bad in ["a b", "-x", "a..b", "x.lock"] {
+            assert!(rename_branch(&repo, "other", bad).is_err(), "{bad} should be rejected");
+        }
+        // Collisions with feature/x are refused up front, and the branch must survive them.
+        for clash in ["feature", "feature/x/y"] {
+            let e = rename_branch(&repo, "other", clash).unwrap_err();
+            assert!(e.contains("conflicts"), "{clash}: {e}");
+            assert!(repo.find_branch("other", BranchType::Local).is_ok(), "{clash} must not delete other");
+        }
+        // Renaming a branch into its own namespace is not a clash with itself.
+        assert!(rename_branch(&repo, "feature/x", "feature/y").is_ok());
+        rename_branch(&repo, "feature/y", "feature/x").unwrap();
+
+        rename_branch(&repo, "other", " renamed ").unwrap();
+        assert!(repo.find_branch("other", BranchType::Local).is_err());
+        let renamed = repo.find_branch("renamed", BranchType::Local).unwrap();
+        assert_eq!(renamed.get().target(), Some(c1));
+        assert_eq!(renamed.upstream().unwrap().name(), Ok(Some("origin/other")));
+        assert_eq!(repo.head().unwrap().shorthand(), Ok("main"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

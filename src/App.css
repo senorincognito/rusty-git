@@ -1281,3 +1281,24 @@ body.resizing {
   color: var(--muted);
   font-style: italic;
 }
+
+/* Inline branch-name editor in the sidebar lists */
+.branch-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 1px 4px;
+  user-select: text;
+}
+
+.branch-input:focus {
+  outline: none;
+}
+
+.branch-input:disabled {
+  opacity: 0.6;
+}
