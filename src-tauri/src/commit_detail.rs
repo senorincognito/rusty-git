@@ -558,6 +558,7 @@ mod tests {
         let mut cfg = repo.config().unwrap();
         cfg.set_str("user.name", "S").unwrap();
         cfg.set_str("user.email", "s@example.com").unwrap();
+        cfg.set_str("core.autocrlf", "false").unwrap(); // the result must not depend on the machine's git config
 
         fs::write(dir.join("a.txt"), "one").unwrap();
         let c1 = commit_all(&repo, "base", &[]);

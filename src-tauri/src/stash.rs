@@ -189,6 +189,7 @@ mod tests {
         let mut cfg = repo.config().unwrap();
         cfg.set_str("user.name", "Stasher").unwrap();
         cfg.set_str("user.email", "s@example.com").unwrap();
+        cfg.set_str("core.autocrlf", "false").unwrap(); // the result must not depend on the machine's git config
         (dir, repo)
     }
 

@@ -165,6 +165,7 @@ mod tests {
         let mut cfg = repo.config().unwrap();
         cfg.set_str("user.name", "R").unwrap();
         cfg.set_str("user.email", "r@example.com").unwrap();
+        cfg.set_str("core.autocrlf", "false").unwrap(); // the result must not depend on the machine's git config
         let a = commit_files(&repo, &dir, &[("a.txt", "1")], "a");
         let b = commit_files(&repo, &dir, &[("a.txt", "2"), ("b.txt", "bee")], "b");
         let c = commit_files(&repo, &dir, &[("c.txt", "sea")], "c");

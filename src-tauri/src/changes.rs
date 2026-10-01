@@ -252,6 +252,7 @@ mod tests {
         let mut cfg = repo.config().unwrap();
         cfg.set_str("user.name", "Test").unwrap();
         cfg.set_str("user.email", "test@example.com").unwrap();
+        cfg.set_str("core.autocrlf", "false").unwrap(); // the result must not depend on the machine's git config
 
         fs::write(dir.join("a.txt"), "one").unwrap();
         fs::create_dir(dir.join("sub")).unwrap();
@@ -304,6 +305,7 @@ mod tests {
             let mut cfg = repo.config().unwrap();
             cfg.set_str("user.name", name).unwrap();
             cfg.set_str("user.email", "t@example.com").unwrap();
+            cfg.set_str("core.autocrlf", "false").unwrap(); // the result must not depend on the machine's git config
         };
         set_user(&repo, "Original");
 
