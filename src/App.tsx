@@ -85,7 +85,7 @@ function App() {
           <SyncBar path={repo.path} refreshKey={graphKey} />
         </header>
         <div className="body">
-          <Sidebar path={repo.path} refreshKey={graphKey} onChanged={() => setGraphKey((k) => k + 1)} />
+          <Sidebar path={repo.path} refreshKey={graphKey} onChanged={onCommitted} />
           <Graph path={repo.path} refreshKey={graphKey} />
           <Changes path={repo.path} refreshKey={graphKey} onCommitted={onCommitted} />
         </div>

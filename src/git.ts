@@ -113,3 +113,7 @@ export const addOriginRemote = (path: string, url: string) =>
 /** Creates a branch at the current commit and checks it out. */
 export const createBranch = (path: string, name: string) =>
   invoke<void>("create_branch", { path, name });
+
+/** Switches to an existing local branch; rejects if local changes would be overwritten. */
+export const checkoutLocalBranch = (path: string, name: string) =>
+  invoke<void>("checkout_local_branch", { path, name });

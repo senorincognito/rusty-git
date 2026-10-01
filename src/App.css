@@ -625,3 +625,7 @@ button {
   margin: 0;
   font-size: 12px;
 }
+
+.branchlist li {
+  user-select: none; /* double-click switches branches; don't select the text */
+}

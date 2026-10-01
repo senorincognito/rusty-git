@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   addOriginRemote,
+  checkoutLocalBranch,
   getLocalBranches,
   getOrigin,
   type BranchInfo,
@@ -29,7 +30,15 @@ function Section({
   );
 }
 
-function LocalBranches({ path, refreshKey }: { path: string; refreshKey: number }) {
+function LocalBranches({
+  path,
+  refreshKey,
+  onChanged,
+}: {
+  path: string;
+  refreshKey: number;
+  onChanged: () => void;
+}) {
   const [branches, setBranches] = useState<BranchInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(0);
@@ -46,6 +55,21 @@ function LocalBranches({ path, refreshKey }: { path: string; refreshKey: number 
     }
   }, [path]);
 
+  const [switching, setSwitching] = useState(false);
+  const switchTo = async (b: BranchInfo) => {
+    if (b.isHead || switching) return;
+    setSwitching(true);
+    try {
+      await checkoutLocalBranch(path, b.name);
+      setError(null);
+      onChanged();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   useEffect(() => {
     refresh();
   }, [refresh, refreshKey]);
@@ -56,7 +80,12 @@ function LocalBranches({ path, refreshKey }: { path: string; refreshKey: number 
       {branches?.length === 0 && <p className="muted side-msg">No branches yet.</p>}
       <ul className="branchlist">
         {branches?.map((b) => (
-          <li key={b.name} className={b.isHead ? "current" : ""} title={b.upstream ?? b.name}>
+          <li
+            key={b.name}
+            className={b.isHead ? "current" : ""}
+            title={b.isHead ? `${b.name} (current)` : `Double-click to check out ${b.name}`}
+            onDoubleClick={() => switchTo(b)}
+          >
             <span className="bname">{b.name}</span>
             {b.behind > 0 && <span className="sync">↓{b.behind}</span>}
             {b.ahead > 0 && <span className="sync">↑{b.ahead}</span>}
@@ -180,7 +209,7 @@ export default function Sidebar({
 }) {
   return (
     <nav className="sidebar">
-      <LocalBranches path={path} refreshKey={refreshKey} />
+      <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} />
       <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} />
     </nav>
   );
