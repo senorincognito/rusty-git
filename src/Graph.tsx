@@ -1,0 +1,136 @@
+import { useEffect, useRef, useState } from "react";
+import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "./git";
+
+const ROW_H = 28;
+const LANE_W = 16;
+const NODE_R = 4.5;
+const PAGE = 1000;
+const OVERSCAN = 10;
+const COLORS = [
+  "#4ea1ff",
+  "#e5646b",
+  "#58c98b",
+  "#e0a64a",
+  "#b583f0",
+  "#3fc7c7",
+  "#e87fb5",
+  "#9aa86b",
+];
+
+const x = (col: number) => col * LANE_W + LANE_W / 2;
+const color = (i: number) => COLORS[i % COLORS.length];
+
+/** Line from the top edge at `from` to the node centre (or node centre to bottom edge). */
+function curve(x1: number, y1: number, x2: number, y2: number) {
+  if (x1 === x2) return `M${x1} ${y1}L${x2} ${y2}`;
+  const mid = (y1 + y2) / 2;
+  return `M${x1} ${y1}C${x1} ${mid} ${x2} ${mid} ${x2} ${y2}`;
+}
+
+function RowGraph({ row, width }: { row: GraphRow; width: number }) {
+  const mid = ROW_H / 2;
+  const cx = x(row.col);
+  const line = (e: Edge, d: string, key: string) => (
+    <path key={key} d={d} stroke={color(e.color)} strokeWidth={2} fill="none" />
+  );
+  return (
+    <svg width={width} height={ROW_H} className="lanes">
+      {row.through.map((e, i) => line(e, curve(x(e.col), 0, x(e.col), ROW_H), `t${i}`))}
+      {row.top.map((e, i) => line(e, curve(x(e.col), 0, cx, mid), `u${i}`))}
+      {row.bottom.map((e, i) => line(e, curve(cx, mid, x(e.col), ROW_H), `b${i}`))}
+      <circle cx={cx} cy={mid} r={NODE_R} fill={color(row.color)} stroke="var(--bg)" strokeWidth={2} />
+    </svg>
+  );
+}
+
+const dateFmt = new Intl.DateTimeFormat(undefined, {
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+export default function Graph({ path, refreshKey = 0 }: { path: string; refreshKey?: number }) {
+  const [graph, setGraph] = useState<GraphData | null>(null);
+  const [limit, setLimit] = useState(PAGE);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewH, setViewH] = useState(600);
+  const scroller = useRef<HTMLDivElement>(null);
+  const loading = useRef(false);
+
+  // Reset when switching repositories.
+  useEffect(() => {
+    setGraph(null);
+    setLimit(PAGE);
+    setSelected(null);
+    scroller.current?.scrollTo({ top: 0 });
+  }, [path]);
+
+  useEffect(() => {
+    let stale = false;
+    loading.current = true;
+    getGraph(path, limit)
+      .then((g) => !stale && (setGraph(g), setError(null)))
+      .catch((e) => !stale && setError(String(e)))
+      .finally(() => (loading.current = false));
+    return () => {
+      stale = true;
+    };
+  }, [path, limit, refreshKey]);
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setViewH(el.clientHeight));
+    ro.observe(el);
+    setViewH(el.clientHeight);
+    return () => ro.disconnect();
+  }, []);
+
+  const rows = graph?.rows ?? [];
+  const first = Math.max(0, Math.floor(scrollTop / ROW_H) - OVERSCAN);
+  const last = Math.min(rows.length, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
+
+  // Load the next page when the user nears the end.
+  useEffect(() => {
+    if (graph?.hasMore && !loading.current && last >= rows.length - 50) {
+      setLimit((l) => l + PAGE);
+    }
+  }, [graph, last, rows.length]);
+
+  const laneWidth = Math.min(Math.max(graph?.maxLanes ?? 1, 1), 24) * LANE_W + 4;
+
+  if (error) return <p className="error pad">{error}</p>;
+  if (graph && rows.length === 0) return <p className="muted pad">No commits yet.</p>;
+
+  return (
+    <div className="graph" ref={scroller} onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}>
+      <div style={{ height: rows.length * ROW_H, position: "relative" }}>
+        {rows.slice(first, last).map((row, i) => (
+          <div
+            key={row.id}
+            className={"row" + (row.id === selected ? " selected" : "")}
+            style={{ top: (first + i) * ROW_H, height: ROW_H }}
+            onClick={() => setSelected(row.id)}
+          >
+            <RowGraph row={row} width={laneWidth} />
+            <div className="subject">
+              {row.refs.map((r) => (
+                <span key={r.kind + r.name} className={`ref ${r.kind}${r.isHead ? " head" : ""}`}>
+                  {r.name}
+                </span>
+              ))}
+              <span className="summary">{row.summary}</span>
+            </div>
+            <span className="author">{row.author}</span>
+            <span className="date">{dateFmt.format(new Date(row.time * 1000))}</span>
+            <span className="sha">{row.shortId}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
