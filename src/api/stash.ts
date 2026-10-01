@@ -27,3 +27,6 @@ export const createStash = (path: string, message: string | null) =>
  * (the rejection explains). The stash is addressed by commit id, not list position.
  */
 export const popStash = (path: string, id: string) => invoke<void>("pop_stash_cmd", { path, id });
+
+/** Deletes a stash without applying it (git stash drop). The changes in it are gone for good. */
+export const dropStash = (path: string, id: string) => invoke<void>("drop_stash_cmd", { path, id });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { getStashes, popStash, type StashEntry } from "@/api/stash";
+import { confirmDialog } from "@/api/dialog";
+import { dropStash, getStashes, popStash, type StashEntry } from "@/api/stash";
 import ContextMenu from "@/components/ContextMenu";
 import Section from "@/components/Section";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
@@ -7,7 +8,7 @@ import { useWorkingChangeCount } from "@/hooks/useWorkingChangeCount";
 
 /**
  * The stashes of the repository, newest first. Clicking one shows its changes in the right panel;
- * right-clicking offers to pop it.
+ * right-clicking offers to pop or delete it.
  */
 export default function Stashes({
   path,
@@ -15,6 +16,7 @@ export default function Stashes({
   selectedId,
   onSelect,
   onPopped,
+  onDropped,
 }: {
   path: string;
   refreshKey: number;
@@ -23,6 +25,8 @@ export default function Stashes({
   onSelect: (stash: { id: string; shortId: string }) => void;
   /** A stash was applied and removed (by its commit id). */
   onPopped: (id: string) => void;
+  /** A stash was deleted without being applied (by its commit id). */
+  onDropped: (id: string) => void;
 }) {
   const [stashes, setStashes] = useState<StashEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +58,28 @@ export default function Stashes({
     try {
       await popStash(path, stash.id);
       onPopped(stash.id);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setPopping(false);
+    }
+  };
+
+  const drop = async (stash: StashEntry) => {
+    const ok = await confirmDialog(
+      `Delete stash@{${stash.index}} "${stash.message}"?
+
+Its changes are not applied, and they are lost: git has no undo for this.`,
+      "Delete stash",
+      true,
+      "Delete",
+    );
+    if (!ok) return;
+    setPopping(true);
+    setError(null);
+    try {
+      await dropStash(path, stash.id);
+      onDropped(stash.id);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -104,6 +130,14 @@ export default function Stashes({
                   ? "Commit or stash your uncommitted changes first"
                   : "Apply this stash to the working directory and remove it from the list",
               onClick: () => pop(menu.stash),
+            },
+            {
+              label: "Delete stash",
+              danger: true,
+              disabled: popping,
+              separatorBefore: true,
+              title: "Remove this stash without applying it (asks first)",
+              onClick: () => drop(menu.stash),
             },
           ]}
         />

@@ -129,6 +129,14 @@ fn pop_stash(repo: &mut Repository, id: &str) -> Result<(), String> {
     }
 }
 
+/// Removes a stash without applying it. The stash commit stays in the object database (and the
+/// reflog of refs/stash) for a while, but its changes are gone from the list for good.
+fn drop_stash(repo: &mut Repository, id: &str) -> Result<(), String> {
+    let oid = Oid::from_str(id).map_err(err)?;
+    let index = stash_index_of(repo, oid).ok_or("That stash no longer exists")?;
+    repo.stash_drop(index).map_err(err)
+}
+
 #[tauri::command]
 pub async fn get_stashes(path: String) -> Result<Vec<StashEntry>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -155,6 +163,17 @@ pub async fn pop_stash_cmd(path: String, id: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let mut repo = Repository::discover(&path).map_err(err)?;
         pop_stash(&mut repo, &id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Deletes a stash without applying it.
+#[tauri::command]
+pub async fn drop_stash_cmd(path: String, id: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut repo = Repository::discover(&path).map_err(err)?;
+        drop_stash(&mut repo, &id)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -247,6 +266,31 @@ mod tests {
         let mut o = StatusOptions::new();
         o.include_untracked(true).recurse_untracked_dirs(true);
         repo.statuses(Some(&mut o)).unwrap().iter().map(|e| (e.path().unwrap().to_string(), e.status())).collect()
+    }
+
+    #[test]
+    fn drop_removes_only_the_chosen_stash() {
+        let (dir, mut repo) = setup("drop");
+        fs::write(dir.join("a.txt"), "one").unwrap();
+        commit_all(&repo, "base");
+        fs::write(dir.join("a.txt"), "two").unwrap();
+        let older = save_stash(&mut repo, Some("older")).unwrap();
+        fs::write(dir.join("b.txt"), "b").unwrap();
+        let newer = save_stash(&mut repo, Some("newer")).unwrap();
+
+        // Dropping works with the working directory dirty and does not touch it.
+        fs::write(dir.join("a.txt"), "dirty").unwrap();
+        drop_stash(&mut repo, &older.to_string()).unwrap();
+        let list = list_stashes(&mut repo).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, newer.to_string());
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "dirty");
+
+        assert!(drop_stash(&mut repo, &older.to_string()).unwrap_err().contains("no longer exists"));
+        drop_stash(&mut repo, &newer.to_string()).unwrap();
+        assert!(list_stashes(&mut repo).unwrap().is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -84,7 +84,9 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   Stashes list and choose *Pop stash*) applies the stash to the working directory and removes it from the
   list, putting back staged changes as staged and restoring untracked files. It needs a clean working
   directory (the button is disabled otherwise). If the stash would conflict, the pop is undone completely
-  and the stash is kept. Applying without removing, and dropping, are not available yet.
+  and the stash is kept. Applying without removing is not available yet.
+- **Delete stash** (right-click the stash in the Stashes list) removes it without applying it, after a confirmation.
+  It works with uncommitted changes in the working directory; the stash's changes are lost.
 
 ### Commit graph context menu
 - Right-click a commit: **Rename commit** opens an editor in the right panel with the full
@@ -182,7 +184,7 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 - Diff view and commit detail panel
 - Tags in the sidebar, remote branch checkout
-- Applying a stash without removing it, and dropping stashes
+- Applying a stash without removing it
 - Merge / rebase, rename branch, push or pull from the context menu
 - Multiple remotes (only `origin` is handled)
 - Discard changes

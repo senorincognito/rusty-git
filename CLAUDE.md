@@ -45,7 +45,7 @@ say plainly that UI behaviour is untested in the running app.
 | `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
 | `remotes.rs` | `origin` info, add origin, `set_origin_remote_url` (right-click the origin header; reuses `BranchNameInput`), delete and rename remote branches |
 | `sync.rs` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
-| `stash.rs` | `get_stashes`, `create_stash` (stashes everything incl. untracked); helpers `stash_index_of`, `untracked_tree` |
+| `stash.rs` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `pop_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
 | `terminal.rs` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
 | `watch.rs` | the `.git` watcher |
 
@@ -161,8 +161,9 @@ app rename so users keep their data. Don't change it casually.
   (`pop_stash`: apply, check for conflicts, then drop;
   re-stages what was staged). Pop requires a clean working directory (disabled in the UI via
   `useWorkingChangeCount`, enforced in Rust) so a
-  conflicting pop can be undone exactly (`restore_clean`) with the stash kept. Apply-without-drop and drop
-  are not built yet.
+  conflicting pop can be undone exactly (`restore_clean`) with the stash kept. **Delete stash** (`drop_stash_cmd`, Stashes right-click,
+  confirmation first) just calls `stash_drop` by commit id and needs no clean working directory. Apply-without-drop
+  is not built yet.
 - **Hunks**: a hunk is a maximal run of added/removed lines (`DiffLine::block`, numbered in file order and identical in
   full-file and context-only views); `FileDiff::blocks` holds one FNV fingerprint per hunk. Every diff view shows a
   heading row per hunk; only the *unstaged* view of a tracked, non-conflicted, non-binary file gets **Stage hunk** /
@@ -318,7 +319,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 
 ## Not implemented yet
 
-Tags in the sidebar; applying a stash without removing it and dropping stashes; line-level (single line) staging and unstaging; checkout of remote branches; merge/rebase as standalone actions; discard
+Tags in the sidebar; applying a stash without removing it; line-level (single line) staging and unstaging; checkout of remote branches; merge/rebase as standalone actions; discard
 changes and stash; conflict resolution UI (pulls with conflicts are aborted); multiple remotes (only
 `origin`); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview

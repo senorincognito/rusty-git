@@ -12,6 +12,7 @@ export default function Sidebar({
   selectedId,
   onSelectCommit,
   onStashPopped,
+  onStashDropped,
 }: {
   path: string;
   refreshKey: number;
@@ -23,6 +24,8 @@ export default function Sidebar({
   onSelectCommit: (commit: { id: string; shortId: string }) => void;
   /** A stash was popped from the list (by its commit id). */
   onStashPopped: (id: string) => void;
+  /** A stash was deleted from the list (by its commit id). */
+  onStashDropped: (id: string) => void;
 }) {
   return (
     <ResizablePanel edge="right" storageKey="sidebarWidth" defaultWidth={240}>
@@ -35,6 +38,7 @@ export default function Sidebar({
           selectedId={selectedId}
           onSelect={onSelectCommit}
           onPopped={onStashPopped}
+          onDropped={onStashDropped}
         />
       </nav>
     </ResizablePanel>
