@@ -7,6 +7,8 @@ import "./InteractiveRebase.scss";
 
 const dateFmt = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
 const summaryOf = (message: string) => message.split("\n", 1)[0];
+// The shortcut modifier: Cmd on macOS, Ctrl elsewhere.
+const isMac = /Mac/.test(navigator.userAgent);
 
 type Action = "pick" | "reword" | "squash" | "drop";
 
@@ -151,12 +153,49 @@ export default function InteractiveRebase({
   })();
   const canStart = !busy && plan !== null && changeCount > 0 && problem === null;
 
-  const moveCommit = (index: number, delta: -1 | 1) =>
-    setOrder((o) => {
-      const next = [...o];
-      [next[index], next[index + delta]] = [next[index + delta], next[index]];
-      return next;
-    });
+  const moveCommit = useCallback(
+    (index: number, delta: -1 | 1) =>
+      setOrder((o) => {
+        if (index + delta < 0 || index + delta >= o.length) return o;
+        const next = [...o];
+        [next[index], next[index + delta]] = [next[index + delta], next[index]];
+        return next;
+      }),
+    [],
+  );
+
+  // Arrow keys: select the commit above/below (with nothing selected, ↓ starts at the top commit and ↑ at the bottom one); with Ctrl
+  // (Cmd on macOS) they move the selected commit instead. Typing in a field, an open menu or popup, a file
+  // diff on top of this screen and a running rebase all leave the arrows alone.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== "ArrowUp" && e.key !== "ArrowDown") || e.defaultPrevented || e.isComposing) return;
+      if (e.shiftKey || e.altKey || busy || diffOpen || commits.length === 0) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (document.querySelector(".ctxmenu, .modal-backdrop")) return;
+      // The other platform's modifier is not ours (Ctrl+arrows belong to the system on a Mac).
+      if (isMac ? e.ctrlKey : e.metaKey) return;
+
+      const up = e.key === "ArrowUp";
+      const index = commits.findIndex((c) => c.id === selectedId);
+      e.preventDefault(); // keep the list from scrolling by itself
+      if (isMac ? e.metaKey : e.ctrlKey) {
+        if (index >= 0) moveCommit(index, up ? -1 : 1); // up = newer, like the list
+        return;
+      }
+      const next = index < 0 ? (up ? commits.length - 1 : 0) : Math.min(Math.max(index + (up ? -1 : 1), 0), commits.length - 1);
+      if (next !== index) onSelectCommit({ id: commits[next].id, shortId: commits[next].shortId });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [commits, selectedId, busy, diffOpen, moveCommit, onSelectCommit]);
+
+  // Keep the selected row in view after the selection or the order changes.
+  const list = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    list.current?.querySelector(".rebaserow.selected")?.scrollIntoView({ block: "nearest" });
+  }, [selectedId, order]);
 
   const setAction = (c: RebaseCommit, action: Action) => {
     if (action === "reword") {
@@ -219,7 +258,7 @@ export default function InteractiveRebase({
 
       <div className="rebasebody">
         {!plan && !error && <p className="muted rebase-msg">{t.common.loading}</p>}
-        <ol className="rebaselist">
+        <ol className="rebaselist" ref={list}>
           {commits.map((c, index) => {
             const action: Action =
               c.id in dropped ? "drop" : c.id in squashed ? "squash" : c.id in reworded ? "reword" : "pick";

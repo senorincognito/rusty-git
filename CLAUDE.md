@@ -115,7 +115,8 @@ app rename so users keep their data. Don't change it casually.
   (`input`/`textarea`/`select`/contenteditable; xterm's hidden textarea counts) and must do nothing while a
   `.ctxmenu` or `.modal-backdrop` is open, because those handle their own Escape. `FileDiff` is the model.
   Existing shortcuts: Esc (close diff / menus / dialogs / editors), Ctrl+\` terminal (`RepoView`),
-  Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles. Keep the shortcuts table in `FEATURES.md` in sync.
+  Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles, ↑/↓ (and Ctrl/Cmd+↑/↓ to move) in the
+  interactive rebase (`InteractiveRebase`, window-level; skips editable targets, menus, popups and `diffOpen`). Keep the shortcuts table in `FEATURES.md` in sync.
 - **Texts** live in `src/i18n/en.ts`, never inline in components: labels, titles/tooltips, aria-labels, placeholders,
   confirmation texts, notices. Use `t.<section>.<key>` (strings), functions for texts with values (`t.sync.pushTo(upstream)`,
   pluralise with the local `plural` helper), and `fill(template, { name: <strong>…</strong> })` for sentences containing markup.

@@ -124,6 +124,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 - Click a commit in the list to see the files it changed in the right panel (the panel's × or Cancel rebase returns to your
   working-directory changes); click a file there to open its diff over the rebase screen, and Back or Esc to return to the
   list. The changes shown are those of the commit as it is now, whatever you reword, squash, drop or move.
+- Keyboard: `↑`/`↓` select the commit above/below (with nothing selected, `↓` picks the top commit and `↑` the bottom one),
+  and `Ctrl`+`↑`/`↓` (`Cmd` on macOS) move the selected commit up/down. The arrows are left alone while you type in a
+  field or use the action dropdown, with a menu or popup open, or while a file diff is shown.
 - Right-click a commit in the list for the same actions as shortcuts: **Reword commit**, **Squash commit** and **Drop commit**
   (unavailable ones are greyed out with the reason), plus **Move commit up** / **Move commit down**, which change the order
   of the commits in the plan (up = newer). Moved commits get a *moved* tag. Like a drop, a new order replays the commits
@@ -229,6 +232,8 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 | `Ctrl`/`Cmd` + `Enter` | Commit (staging panel) or Update (rename dialog) |
 | `Enter` / `Space` | Open the focused file row; `Enter` confirms an inline branch rename |
 | `←` / `→` on a panel's resize handle | Resize it (hold `Shift` for bigger steps) |
+| `↑` / `↓` in the interactive rebase | Select the commit above / below (with nothing selected: `↓` selects the top commit, `↑` the bottom one) |
+| `Ctrl`/`Cmd` + `↑` / `↓` in the interactive rebase | Move the selected commit up / down (`Cmd` on macOS, `Ctrl` elsewhere) |
 
 Esc leaves text fields and the terminal alone, so it never interferes with typing.
 
