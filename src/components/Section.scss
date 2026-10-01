@@ -1,8 +1,28 @@
 @use "@/styles/core" as *;
 
-// Collapsible box in the left panel.
+// Collapsible box in the left panel. The boxes share the panel's height: a long list shrinks and scrolls inside its
+// own box, so every headline stays visible however many branches or stashes there are.
+.sidebox {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
+
+  // Never squeezed below the headline plus a few rows.
+  &.open {
+    min-height: 96px;
+  }
+}
+
+.sidebox-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .sidebox-headrow {
   display: flex;
+  flex: none;
   align-items: stretch;
   border-bottom: 1px solid $border;
 }

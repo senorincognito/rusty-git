@@ -16,7 +16,7 @@ export default function Section({
 }) {
   const [open, setOpen] = useState(true);
   return (
-    <section className="sidebox">
+    <section className={"sidebox" + (open ? " open" : "")}>
       <div className="sidebox-headrow">
         <button className="sidebox-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <span className="chev">{open ? "▾" : "▸"}</span>

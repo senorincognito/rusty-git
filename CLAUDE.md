@@ -95,6 +95,8 @@ app rename so users keep their data. Don't change it casually.
   (`const isCurrent = start(); ...; if (isCurrent()) set(...)`).
 - **Sidebar section headlines** can carry a "⋯" menu (`Section`'s `action` prop): Local branches (*New branch…*, which shows
   the same `NewBranchForm` the toolbar's Branch button uses, inline) and Remotes. Keep branch creation in that one form.
+- **Sidebar layout**: `.sidebar` does not scroll itself; each open `Section` is a shrinkable flex item (min height 96px) whose
+  `.sidebox-body` scrolls, so all headlines stay visible. Keep new sidebar sections inside `Section`.
 - **Sidebar filter**: `Sidebar` owns one text field (not persisted) and passes `filter` to `LocalBranches`, `Remotes` and `Stashes`,
   which list only matches via `matchesFilter` (`sidebar/filter.ts`: all words, case-insensitive). New sidebar lists should take it too.
 - **Popovers/menus** use `ContextMenu` (portal to `<body>`; supports `checked`, `separatorBefore`,
