@@ -72,6 +72,28 @@ pub(crate) fn save_stash(repo: &mut Repository, message: Option<&str>) -> Result
     }
 }
 
+/// Like [`save_stash`], but only for the given files (`git stash push --include-untracked -- <paths>`):
+/// their staged and unstaged edits and, for untracked ones, the files themselves. Everything else stays
+/// in the working directory. It runs the system git: libgit2's own path-limited stash also cleans the
+/// files that were not selected. Paths are literal (`--literal-pathspecs`), so names like "[x].txt" are fine.
+pub(crate) fn save_stash_paths(repo: &Repository, paths: &[String]) -> Result<(), String> {
+    if paths.is_empty() {
+        return Err("No files to stash".into());
+    }
+    if repo.head().and_then(|h| h.peel_to_commit()).is_err() {
+        return Err("Make a first commit before stashing".into());
+    }
+    let known = crate::changes::status_of(repo)?;
+    if let Some(p) = paths.iter().find(|p| !known.iter().any(|c| &c.path == *p)) {
+        return Err(format!("{p} has no uncommitted changes to stash"));
+    }
+    let workdir = repo.workdir().and_then(|w| w.to_str()).ok_or("repository has no working directory")?;
+
+    let mut args = vec!["--literal-pathspecs", "stash", "push", "--include-untracked", "--"];
+    args.extend(paths.iter().map(String::as_str));
+    crate::sync::run_git(workdir, &args).map(|_| ())
+}
+
 /// Puts the working directory back to a clean checkout of HEAD, untracked files included.
 fn restore_clean(repo: &Repository) {
     if let Ok(head) = repo.head().and_then(|h| h.peel(ObjectType::Commit)) {
@@ -152,6 +174,14 @@ pub async fn create_stash(path: String, message: Option<String>) -> Result<Strin
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Stashes only the given files.
+#[tauri::command]
+pub async fn stash_paths_cmd(path: String, paths: Vec<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || save_stash_paths(&Repository::discover(&path).map_err(err)?, &paths))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Applies a stash and removes it from the list. Needs a clean working directory.
@@ -264,6 +294,55 @@ mod tests {
         let mut o = StatusOptions::new();
         o.include_untracked(true).recurse_untracked_dirs(true);
         repo.statuses(Some(&mut o)).unwrap().iter().map(|e| (e.path().unwrap().to_string(), e.status())).collect()
+    }
+
+    #[test]
+    fn stashing_selected_files_leaves_the_rest() {
+        let (dir, mut repo) = setup("paths");
+        for name in ["a.txt", "b.txt", "[x].txt", "x.txt"] {
+            fs::write(dir.join(name), "base").unwrap();
+        }
+        commit_all(&repo, "base");
+
+        fs::write(dir.join("a.txt"), "edited").unwrap();
+        fs::write(dir.join("b.txt"), "edited").unwrap();
+        fs::write(dir.join("[x].txt"), "edited").unwrap();
+        fs::write(dir.join("x.txt"), "edited").unwrap();
+        fs::write(dir.join("new.txt"), "untracked").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("a.txt")).unwrap(); // a.txt is staged
+
+        index.write().unwrap();
+
+        assert!(save_stash_paths(&repo, &[]).is_err());
+        assert!(save_stash_paths(&repo, &["nope.txt".into()]).unwrap_err().contains("nope.txt"));
+
+        // A name with glob characters matches only itself ("[x].txt" must not also take "x.txt").
+        save_stash_paths(&repo, &["[x].txt".into()]).unwrap();
+        assert_eq!(fs::read_to_string(dir.join("[x].txt")).unwrap(), "base");
+        assert_eq!(fs::read_to_string(dir.join("x.txt")).unwrap(), "edited");
+
+        // A staged file and an untracked file go; the other edited file stays.
+        save_stash_paths(&repo, &["a.txt".into(), "new.txt".into()]).unwrap();
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "base");
+        assert!(!dir.join("new.txt").exists());
+        assert_eq!(fs::read_to_string(dir.join("b.txt")).unwrap(), "edited");
+
+        let list = list_stashes(&mut repo).unwrap();
+        assert_eq!(list.len(), 2);
+
+        // The stash holds what was set aside: popping it brings back the staged edit and the new file.
+        pop_stash_after_cleaning(&mut repo, &list[0].id);
+        assert_eq!(fs::read_to_string(dir.join("a.txt")).unwrap(), "edited");
+        assert_eq!(fs::read_to_string(dir.join("new.txt")).unwrap(), "untracked");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // pop_stash needs a clean working directory: put the remaining edits aside first.
+    fn pop_stash_after_cleaning(repo: &mut Repository, id: &str) {
+        save_stash(repo, Some("rest")).unwrap();
+        pop_stash(repo, id).unwrap();
     }
 
     #[test]

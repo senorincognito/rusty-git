@@ -13,6 +13,11 @@ export const stagePaths = (path: string, paths: string[]) =>
   invoke<void>("stage_paths", { path, paths });
 export const unstagePaths = (path: string, paths: string[]) =>
   invoke<void>("unstage_paths", { path, paths });
+/**
+ * Throws away the unstaged changes of whole files: modified and deleted files go back to the staged
+ * version, untracked files are deleted. Not undoable.
+ */
+export const discardPaths = (path: string, paths: string[]) => invoke<void>("discard_paths", { path, paths });
 /** Commits the index; with `amend`, replaces the last commit instead. */
 export const createCommit = (path: string, message: string, amend = false) =>
   invoke<string>("create_commit", { path, message, amend });

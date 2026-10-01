@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use git2::build::CheckoutBuilder;
 use git2::{ObjectType, Oid, Repository, RepositoryState, Status, StatusOptions};
 use serde::Serialize;
 
@@ -93,6 +94,42 @@ fn unstage(repo: &Repository, paths: &[String]) -> Result<(), String> {
             index.write().map_err(err)
         }
     }
+}
+
+/// Throws away the unstaged changes of whole files: a modified or deleted file goes back to what the
+/// index holds (so anything staged is kept), an untracked file is deleted. Only paths that really have
+/// unstaged changes are accepted, and conflicted files are refused (there is no conflict UI yet).
+fn discard(repo: &Repository, paths: &[String]) -> Result<(), String> {
+    let status = status_of(repo)?;
+    let mut restore = Vec::new();
+    let mut delete = Vec::new();
+    for p in paths {
+        let kind = status
+            .iter()
+            .find(|c| c.path == *p)
+            .and_then(|c| c.unstaged)
+            .ok_or_else(|| format!("{p} has no unstaged changes to discard"))?;
+        match kind {
+            "conflicted" => return Err(format!("{p} has merge conflicts; resolve them first")),
+            "new" => delete.push(p),
+            _ => restore.push(p),
+        }
+    }
+
+    if !restore.is_empty() {
+        let mut checkout = CheckoutBuilder::new();
+        checkout.force().disable_pathspec_match(true);
+        for p in &restore {
+            checkout.path(p);
+        }
+        let mut index = repo.index().map_err(err)?;
+        repo.checkout_index(Some(&mut index), Some(&mut checkout)).map_err(err)?;
+    }
+    let workdir = repo.workdir().ok_or("repository has no working directory")?;
+    for p in delete {
+        std::fs::remove_file(workdir.join(p)).map_err(|e| format!("Could not delete {p}: {e}"))?;
+    }
+    Ok(())
 }
 
 fn commit_staged(repo: &mut Repository, message: &str) -> Result<Oid, String> {
@@ -219,6 +256,12 @@ pub async fn unstage_paths(path: String, paths: Vec<String>) -> Result<(), Strin
     blocking(path, move |r| unstage(r, &paths)).await
 }
 
+/// Discards the unstaged changes of whole files (untracked files are deleted). Not undoable.
+#[tauri::command]
+pub async fn discard_paths(path: String, paths: Vec<String>) -> Result<(), String> {
+    blocking(path, move |r| discard(r, &paths)).await
+}
+
 /// Commits the index, or with `amend` replaces the last commit. Returns the commit id.
 #[tauri::command]
 pub async fn create_commit(path: String, message: String, amend: bool) -> Result<String, String> {
@@ -292,6 +335,55 @@ mod tests {
 
         // Nothing staged -> refuse.
         assert_eq!(commit_staged(&mut repo, "again").unwrap_err(), "Nothing staged to commit");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn discard_whole_files() {
+        let dir = std::env::temp_dir().join(format!("gc-discard-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut repo = Repository::init(&dir).unwrap();
+        let mut cfg = repo.config().unwrap();
+        cfg.set_str("user.name", "Test").unwrap();
+        cfg.set_str("user.email", "test@example.com").unwrap();
+        cfg.set_str("core.autocrlf", "false").unwrap();
+        for (name, text) in [("mod.txt", "m1"), ("gone.txt", "g1"), ("both.txt", "b1")] {
+            fs::write(dir.join(name), text).unwrap();
+        }
+        stage(&repo, &["mod.txt".into(), "gone.txt".into(), "both.txt".into()]).unwrap();
+        commit_staged(&mut repo, "base").unwrap();
+
+        fs::write(dir.join("mod.txt"), "m2").unwrap();
+        fs::remove_file(dir.join("gone.txt")).unwrap();
+        fs::write(dir.join("both.txt"), "b2").unwrap();
+        stage(&repo, &["both.txt".into()]).unwrap(); // staged b2 ...
+        fs::write(dir.join("both.txt"), "b3").unwrap(); // ... plus a later edit
+        fs::create_dir(dir.join("sub")).unwrap();
+        fs::write(dir.join("sub").join("new.txt"), "n").unwrap();
+        fs::write(dir.join("keep.txt"), "k").unwrap();
+
+        // Paths without unstaged changes are refused, and nothing happens at all in that case.
+        let e = discard(&repo, &["mod.txt".into(), "nope.txt".into()]).unwrap_err();
+        assert!(e.contains("nope.txt"), "{e}");
+        assert_eq!(fs::read_to_string(dir.join("mod.txt")).unwrap(), "m2");
+
+        discard(&repo, &["mod.txt".into(), "gone.txt".into(), "both.txt".into(), "sub/new.txt".into()]).unwrap();
+        assert_eq!(fs::read_to_string(dir.join("mod.txt")).unwrap(), "m1");
+        assert_eq!(fs::read_to_string(dir.join("gone.txt")).unwrap(), "g1", "a deleted file comes back");
+        assert_eq!(fs::read_to_string(dir.join("both.txt")).unwrap(), "b2", "back to the staged version");
+        assert!(!dir.join("sub").join("new.txt").exists(), "an untracked file is deleted");
+        assert!(dir.join("keep.txt").exists(), "other files are untouched");
+
+        let st = status_of(&repo).unwrap();
+        assert_eq!(find(&st, "both.txt").staged, Some("modified"), "the staged change stays");
+        assert_eq!(find(&st, "both.txt").unstaged, None);
+        assert_eq!(
+            st.len(),
+            2,
+            "only both.txt and keep.txt are left: {:?}",
+            st.iter().map(|c| &c.path).collect::<Vec<_>>()
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }

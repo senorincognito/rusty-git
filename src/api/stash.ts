@@ -30,3 +30,9 @@ export const popStash = (path: string, id: string) => invoke<void>("pop_stash_cm
 
 /** Deletes a stash without applying it (git stash drop). The changes in it are gone for good. */
 export const dropStash = (path: string, id: string) => invoke<void>("drop_stash_cmd", { path, id });
+
+/**
+ * Stashes only these files (staged and unstaged edits, and untracked files among them); everything else
+ * stays in the working directory.
+ */
+export const stashPaths = (path: string, paths: string[]) => invoke<void>("stash_paths_cmd", { path, paths });

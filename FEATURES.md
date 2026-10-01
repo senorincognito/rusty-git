@@ -44,6 +44,13 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   HEAD, index and ref changes. File lists also refresh when
   the window regains focus, so edits made in your editor show up.
 
+## Right-click on a changed file
+- In the **Unstaged** list: *Stage*, *Discard changes…* (or *Delete file…* for an untracked file, *Restore file…* for one you
+  deleted; asks first and cannot be undone; a staged version of the file is kept) and *Stash*.
+- In the **Staged** list: *Unstage* and *Stash*.
+- *Stash* moves just that file (its staged and unstaged edits, or the untracked file itself) into a new stash named
+  `WIP on <branch>: ...`; every other change stays in the working directory. Discard is not offered for conflicted files.
+
 ## Commit details
 - Click a commit in the graph: the right panel switches to that commit's message, author, date,
   parents and the files it changed (added, modified, deleted, renamed with their old path).

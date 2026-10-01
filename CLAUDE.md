@@ -42,14 +42,14 @@ say plainly that UI behaviour is untested in the running app.
 | `reset.rs` | `get_reset_info` (what a reset would remove/add, pushed count, uncommitted files), `reset_to_commit` (soft/mixed/hard) |
 | `repo.rs` | `open_repo`, recent repos (JSON in the app data dir) |
 | `graph.rs` | `get_graph`: revwalk over all refs, lane layout computed in Rust, `on_head` flag per row |
-| `changes.rs` | status, stage/unstage, `create_commit` (new or `amend`), `get_head_commit` |
+| `changes.rs` | status, stage/unstage, `discard_paths` (whole-file discard), `create_commit` (new or `amend`), `get_head_commit` |
 | `hunks.rs` | `stage_hunk`, `discard_hunk`, `unstage_hunk`: apply one hunk of a file's staged/unstaged changes (see Product decisions) |
 | `commit_detail.rs` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
 | `history.rs` | `get_rename_info`, `rename_commit_message` (rewrites the commit and its descendants); `is_pushed` |
 | `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
 | `remotes.rs` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
 | `sync.rs` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
-| `stash.rs` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `pop_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
+| `stash.rs` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
 | `terminal.rs` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
 | `watch.rs` | the `.git` watcher |
 
@@ -182,6 +182,11 @@ app rename so users keep their data. Don't change it casually.
   conflicting pop can be undone exactly (`restore_clean`) with the stash kept. **Delete stash** (`drop_stash_cmd`, Stashes right-click,
   confirmation first) just calls `stash_drop` by commit id and needs no clean working directory. Apply-without-drop
   is not built yet.
+- **File context menu** (right-click a row in `Changes`): Unstaged = Stage / Discard / Stash, Staged = Unstage / Stash. Discard
+  (`discard_paths`) restores from the index (so staged edits survive) or deletes an untracked file, only for paths that
+  really have unstaged changes, never for conflicted files, always after a confirmation. Single-file **Stash**
+  runs `git --literal-pathspecs stash push --include-untracked -- <paths>`: libgit2's path-limited `stash_save_ext` also
+  cleans the files that were NOT selected, and git2 cannot set its message, so don't use it.
 - **Hunks**: a hunk is a maximal run of added/removed lines (`DiffLine::block`, numbered in file order and identical in
   full-file and context-only views); `FileDiff::blocks` holds one FNV fingerprint per hunk. Every diff view shows a
   heading row per hunk; only the *unstaged* view of a tracked, non-conflicted, non-binary file gets **Stage hunk** /
