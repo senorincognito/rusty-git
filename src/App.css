@@ -574,3 +574,69 @@ button {
   color: var(--muted);
   font-size: 11px;
 }
+
+/* The sync group takes the auto margin; the terminal toggle follows it. */
+.syncbar {
+  margin-left: auto;
+}
+
+.termtoggle {
+  margin-left: 6px;
+}
+
+.termtoggle.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.termpanel {
+  flex: none;
+  position: relative;
+  flex-direction: column;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+.termresize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 5;
+}
+
+.termhead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 12px;
+  background: var(--panel);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.termpath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  direction: rtl;
+  text-align: left;
+}
+
+.termhost {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 8px;
+  overflow: hidden;
+}

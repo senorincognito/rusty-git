@@ -13,6 +13,7 @@ import Changes from "./Changes";
 import Graph from "./Graph";
 import Sidebar from "./Sidebar";
 import SyncBar from "./SyncBar";
+import TerminalPanel from "./TerminalPanel";
 import "./App.css";
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
   const [recents, setRecents] = useState<RepoInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [graphKey, setGraphKey] = useState(0);
+  const [terminalOpen, setTerminalOpen] = useState(false);
 
   const refreshRecents = useCallback(
     () => getRecentRepos().then(setRecents).catch(() => setRecents([])),
@@ -63,6 +65,18 @@ function App() {
     };
   }, [repoPath, reload]);
 
+  useEffect(() => {
+    if (!repoPath) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.code === "Backquote") {
+        e.preventDefault();
+        setTerminalOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [repoPath]);
+
   const browse = useCallback(async () => {
     const path = await pickFolder();
     if (path) await open(path);
@@ -81,12 +95,20 @@ function App() {
             {repo.head ?? "(no commits yet)"}
           </span>
           <SyncBar path={repo.path} refreshKey={graphKey} />
+          <button
+            className={"syncbtn termtoggle" + (terminalOpen ? " active" : "")}
+            onClick={() => setTerminalOpen((o) => !o)}
+            title="Toggle terminal (Ctrl+`)"
+          >
+            &gt;_ Terminal
+          </button>
         </header>
         <div className="body">
           <Sidebar path={repo.path} refreshKey={graphKey} onChanged={() => setGraphKey((k) => k + 1)} />
           <Graph path={repo.path} refreshKey={graphKey} />
           <Changes path={repo.path} refreshKey={graphKey} onCommitted={onCommitted} />
         </div>
+        <TerminalPanel path={repo.path} open={terminalOpen} onClose={() => setTerminalOpen(false)} />
       </div>
     );
   }

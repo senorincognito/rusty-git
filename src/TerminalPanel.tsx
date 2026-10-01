@@ -1,0 +1,197 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { Terminal as XTerm } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
+import { termResize, termStart, termStop, termWrite } from "./git";
+
+const MIN_H = 120;
+let nextSessionId = Date.now();
+
+/**
+ * Bottom panel with a real shell in the repository folder. It stays mounted while hidden so
+ * the session (and its scrollback) survives toggling; it restarts when the repo changes.
+ */
+export default function TerminalPanel({
+  path,
+  open,
+  onClose,
+}: {
+  path: string;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const term = useRef<XTerm | null>(null);
+  const fit = useRef<FitAddon | null>(null);
+  const session = useRef(0);
+  const started = useRef(false);
+  const exited = useRef(false);
+  const pathRef = useRef(path);
+  const openRef = useRef(open);
+  const [ready, setReady] = useState(false);
+  const [height, setHeight] = useState(280);
+
+  pathRef.current = path;
+  openRef.current = open;
+
+  const start = useCallback(async () => {
+    const t = term.current;
+    if (!t) return;
+    exited.current = false;
+    const id = ++nextSessionId;
+    session.current = id;
+    t.reset();
+    try {
+      fit.current?.fit();
+    } catch {
+      /* host not measurable yet */
+    }
+    try {
+      await termStart(pathRef.current, id, t.cols, t.rows);
+    } catch (e) {
+      exited.current = true;
+      t.write(`\r\nCould not start the terminal: ${e}\r\nPress any key to retry.\r\n`);
+    }
+  }, []);
+
+  // Create the emulator once and connect it to the backend.
+  useEffect(() => {
+    const t = new XTerm({
+      fontFamily: 'Consolas, "Cascadia Mono", Menlo, monospace',
+      fontSize: 13,
+      cursorBlink: true,
+      scrollback: 5000,
+      theme: {
+        background: "#1b1d23",
+        foreground: "#e4e6eb",
+        cursor: "#3fa7a0",
+        selectionBackground: "#3fa7a055",
+      },
+    });
+    const f = new FitAddon();
+    t.loadAddon(f);
+    t.open(host.current!);
+    term.current = t;
+    fit.current = f;
+
+    t.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown") return true;
+      // Let the app handle the toggle shortcut.
+      if (e.ctrlKey && e.code === "Backquote") return false;
+      // Ctrl+C copies when text is selected; otherwise it is the usual interrupt.
+      if (e.ctrlKey && !e.shiftKey && e.code === "KeyC" && t.hasSelection()) {
+        navigator.clipboard?.writeText(t.getSelection()).catch(() => {});
+        t.clearSelection();
+        return false;
+      }
+      return true;
+    });
+
+    t.onData((data) => {
+      if (exited.current) {
+        start();
+      } else {
+        termWrite(session.current, data).catch(() => {});
+      }
+    });
+
+    let disposed = false;
+    const unlisten: (() => void)[] = [];
+    Promise.all([
+      listen<{ id: number; data: string }>("term-data", (e) => {
+        if (e.payload.id === session.current) t.write(e.payload.data);
+      }),
+      listen<number>("term-exit", (e) => {
+        if (e.payload === session.current) {
+          exited.current = true;
+          t.write("\r\n\x1b[2m[Process exited. Press any key to restart]\x1b[0m\r\n");
+        }
+      }),
+    ]).then((fns) => {
+      if (disposed) fns.forEach((fn) => fn());
+      else {
+        unlisten.push(...fns);
+        setReady(true);
+      }
+    });
+
+    const ro = new ResizeObserver(() => {
+      const h = host.current;
+      if (!h || h.clientHeight === 0 || !openRef.current) return; // hidden: nothing to measure
+      try {
+        f.fit();
+        if (started.current) termResize(session.current, t.cols, t.rows).catch(() => {});
+      } catch {
+        /* ignore transient measuring errors */
+      }
+    });
+    ro.observe(host.current!);
+
+    return () => {
+      disposed = true;
+      ro.disconnect();
+      unlisten.forEach((fn) => fn());
+      t.dispose();
+      term.current = null;
+      fit.current = null;
+      started.current = false;
+      setReady(false);
+      termStop().catch(() => {});
+    };
+  }, [start]);
+
+  // First time the panel is shown, start the shell; afterwards just refit and focus.
+  useEffect(() => {
+    if (!open || !ready) return;
+    if (!started.current) {
+      started.current = true;
+      start();
+    } else {
+      try {
+        fit.current?.fit();
+        if (term.current) termResize(session.current, term.current.cols, term.current.rows);
+      } catch {
+        /* ignore */
+      }
+    }
+    term.current?.focus();
+  }, [open, ready, start]);
+
+  // A different repository gets a fresh shell in its folder.
+  useEffect(() => {
+    if (started.current) start();
+  }, [path, start]);
+
+  const startDrag = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = height;
+    const onMove = (m: MouseEvent) =>
+      setHeight(
+        Math.min(Math.max(startH + (startY - m.clientY), MIN_H), window.innerHeight * 0.8),
+      );
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
+  return (
+    <section className="termpanel" style={{ height, display: open ? "flex" : "none" }}>
+      <div className="termresize" onMouseDown={startDrag} />
+      <header className="termhead">
+        <span>Terminal</span>
+        <span className="termpath" title={path}>
+          {path}
+        </span>
+        <button className="ghost" onClick={onClose} title="Hide terminal (Ctrl+`)">
+          ×
+        </button>
+      </header>
+      <div className="termhost" ref={host} />
+    </section>
+  );
+}
