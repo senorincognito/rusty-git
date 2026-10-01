@@ -74,3 +74,38 @@ export const createCommit = (path: string, message: string) =>
 
 export const watchRepo = (path: string) => invoke<void>("watch_repo", { path });
 export const unwatchRepo = () => invoke<void>("unwatch_repo");
+
+export interface SyncStatus {
+  branch: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  hasRemote: boolean;
+}
+
+export const getSyncStatus = (path: string) => invoke<SyncStatus>("get_sync_status", { path });
+export const gitFetch = (path: string) => invoke<string>("git_fetch", { path });
+export const gitPull = (path: string) => invoke<string>("git_pull", { path });
+export const gitPush = (path: string) => invoke<string>("git_push", { path });
+
+export interface BranchInfo {
+  name: string;
+  isHead: boolean;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+}
+
+export const getLocalBranches = (path: string) =>
+  invoke<BranchInfo[]>("get_local_branches", { path });
+
+export interface RemoteInfo {
+  name: string;
+  url: string;
+  branches: string[];
+}
+
+/** The origin remote, or null if the repo has none. */
+export const getOrigin = (path: string) => invoke<RemoteInfo | null>("get_origin", { path });
+export const addOriginRemote = (path: string, url: string) =>
+  invoke<void>("add_origin_remote", { path, url });

@@ -11,6 +11,8 @@ import {
 } from "./git";
 import Changes from "./Changes";
 import Graph from "./Graph";
+import Sidebar from "./Sidebar";
+import SyncBar from "./SyncBar";
 import "./App.css";
 
 function App() {
@@ -78,8 +80,10 @@ function App() {
             {repo.detached ? "detached @ " : ""}
             {repo.head ?? "(no commits yet)"}
           </span>
+          <SyncBar path={repo.path} refreshKey={graphKey} />
         </header>
         <div className="body">
+          <Sidebar path={repo.path} refreshKey={graphKey} onChanged={() => setGraphKey((k) => k + 1)} />
           <Graph path={repo.path} refreshKey={graphKey} />
           <Changes path={repo.path} refreshKey={graphKey} onCommitted={onCommitted} />
         </div>
