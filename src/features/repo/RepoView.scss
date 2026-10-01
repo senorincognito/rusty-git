@@ -42,6 +42,25 @@
   display: flex;
 }
 
+// Sidebar and centre column; the interactive-rebase screen covers both.
+.workarea {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.workarea-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+
+  // Hidden but still laid out, so the graph keeps its scroll position.
+  &.covered {
+    visibility: hidden;
+  }
+}
+
 // Centre column: the graph, or a file diff on top of it.
 .center {
   position: relative;

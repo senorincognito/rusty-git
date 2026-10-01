@@ -102,16 +102,21 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   force push is then needed).
 
 ## Interactive rebase
-- Right-click a commit of the current branch and choose **Interactive rebase…**. The right panel lists every commit after
-  it (newest first, like `git rebase -i <commit>`; the commit you clicked is the base and stays as it is), each with its
-  message in an editor, author, date and *pushed* / *merge* tags.
-- For now the only action is **rewording**: change as many messages as you like (a blue margin marks them, *Undo* puts one
-  back), then **Reword N commits** (or Ctrl/Cmd+Enter). Esc or Cancel closes it without changes.
-- The changed commits get the new messages and you as committer; every commit after the oldest changed one is rebuilt with
-  the same content, author and date (new ids). Files, the staging area and other branches are not touched. The panel says
-  how many extra commits are rewritten and warns when any of them is already pushed (a force push is then needed).
+- Right-click a commit of the current branch and choose **Interactive rebase…**. A rebase screen replaces the sidebar
+  and the graph (the right panel stays): it lists every commit after the one you clicked, newest first, like
+  `git rebase -i <commit>`. The commit you clicked is the base and stays as it is.
+- Each commit has an action:
+  - **pick** keeps the commit as it is (the default);
+  - **reword** opens a popup with the commit message and **Cancel** / **Update message** (Ctrl/Cmd+Enter). The new
+    first line shows in the list, a blue margin marks the commit, and **Edit message** opens the popup again. Choosing
+    *pick* again drops the new message.
+- **Start rebase** applies everything at once; **Cancel rebase** (top or bottom, or Esc) leaves without changes.
+- The reworded commits get the new messages and you as committer; every commit after the oldest reworded one is rebuilt
+  with the same content, author and date (new ids). Files, the staging area and other branches are not touched. The
+  footer says how many extra commits are rewritten and warns when any of them is already pushed (a force push is then
+  needed).
 - Only the branch's own line of history is offered (not commits that came in through a merge), up to 500 commits. If the
-  branch moved since the panel opened (a commit, a pull), applying is refused: close it and start again.
+  branch moved since the screen opened (a commit, a pull), starting is refused: cancel and start again.
 
 ## Dropping a commit
 - Right-click a commit on the current branch and choose **Drop commit** (greyed out, with a tooltip, on other

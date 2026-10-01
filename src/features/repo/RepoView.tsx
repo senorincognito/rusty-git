@@ -35,7 +35,7 @@ export default function RepoView({
   // Why the last fetch failed (shown as a warning beside "origin"), null while fetching works.
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; shortId: string } | null>(null);
-  // The base commit of an open interactive rebase (the commits after it are edited in the right panel).
+  // The base commit of an open interactive rebase (its screen covers the sidebar and the graph).
   const [rebasing, setRebasing] = useState<{ id: string; shortId: string } | null>(null);
   // The commit whose files are shown in the right panel (instead of the working-directory changes).
   const [selectedCommit, setSelectedCommit] = useState<{ id: string; shortId: string } | null>(null);
@@ -44,6 +44,16 @@ export default function RepoView({
   // An uncommitted file (staged or not) shown in the centre; chosen from the Changes panel.
   const [openWorkingFile, setOpenWorkingFile] = useState<{ path: string; staged: boolean; status: ChangeKind } | null>(null);
   const path = repo.path;
+
+  // Right-click > Interactive rebase: its screen replaces the sidebar and the graph; the right panel
+  // goes back to the working-directory changes.
+  const startRebase = (base: { id: string; shortId: string }) => {
+    setRenaming(null);
+    closeCommit();
+    setOpenWorkingFile(null);
+    setRebasing(base);
+  };
+  const cancelRebase = useCallback(() => setRebasing(null), []);
 
   const selectCommit = (commit: { id: string; shortId: string }) => {
     setSelectedCommit(commit);
@@ -152,72 +162,72 @@ export default function RepoView({
         </button>
       </header>
       <div className="body">
-        <Sidebar
-          path={path}
-          refreshKey={graphKey}
-          onChanged={reload}
-          fetchError={fetchError}
-          selectedId={selectedCommit?.id ?? null}
-          onSelectCommit={selectCommit}
-          onStashPopped={(id) => {
-            if (selectedCommit?.id === id) closeCommit(); // its detail view has nothing left to show
-            reload();
-          }}
-          onStashDropped={(id) => {
-            if (selectedCommit?.id === id) closeCommit();
-            reload();
-          }}
-        />
-        <div className="center">
-          {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
-          <div className={"center-pane" + (openFile || openWorkingFile ? " hidden" : "")}>
-            <Graph
+        <div className="workarea">
+          {/* Sidebar and graph stay mounted under the rebase screen, so they come back as they were. */}
+          <div className={"workarea-content" + (rebasing ? " covered" : "")} inert={rebasing !== null}>
+            <Sidebar
               path={path}
               refreshKey={graphKey}
+              onChanged={reload}
+              fetchError={fetchError}
               selectedId={selectedCommit?.id ?? null}
               onSelectCommit={selectCommit}
-              onSelectWip={() => {
-                closeCommit(); // back to the working-directory changes in the right panel
-                setRenaming(null);
-                setRebasing(null);
+              onStashPopped={(id) => {
+                if (selectedCommit?.id === id) closeCommit(); // its detail view has nothing left to show
+                reload();
               }}
-              onRenameCommit={(c) => {
-                setRebasing(null);
-                setRenaming(c);
+              onStashDropped={(id) => {
+                if (selectedCommit?.id === id) closeCommit();
+                reload();
               }}
-              onInteractiveRebase={(c) => {
-                setRenaming(null);
-                setRebasing(c);
-              }}
-              onDropCommit={dropCommit}
-              onResetCommit={resetCommit}
             />
+            <div className="center">
+              {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
+              <div className={"center-pane" + (openFile || openWorkingFile ? " hidden" : "")}>
+                <Graph
+                  path={path}
+                  refreshKey={graphKey}
+                  selectedId={selectedCommit?.id ?? null}
+                  onSelectCommit={selectCommit}
+                  onSelectWip={() => {
+                    closeCommit(); // back to the working-directory changes in the right panel
+                    setRenaming(null);
+                    setRebasing(null);
+                  }}
+                  onRenameCommit={(c) => {
+                    setRebasing(null);
+                    setRenaming(c);
+                  }}
+                  onInteractiveRebase={startRebase}
+                  onDropCommit={dropCommit}
+                  onResetCommit={resetCommit}
+                />
+              </div>
+              {openFile && selectedCommit && (
+                <FileDiff
+                  path={path}
+                  source={{ kind: "commit", id: selectedCommit.id, shortId: selectedCommit.shortId }}
+                  file={openFile}
+                  onClose={() => setOpenFile(null)}
+                />
+              )}
+              {openWorkingFile && !openFile && (
+                <FileDiff
+                  path={path}
+                  source={{ kind: openWorkingFile.staged ? "staged" : "unstaged" }}
+                  file={{ path: openWorkingFile.path, status: openWorkingFile.status }}
+                  refreshKey={graphKey}
+                  onChanged={reload} // a staged or discarded hunk changes the staging lists and the graph
+                  onClose={() => setOpenWorkingFile(null)}
+                />
+              )}
+            </div>
           </div>
-          {openFile && selectedCommit && (
-            <FileDiff
-              path={path}
-              source={{ kind: "commit", id: selectedCommit.id, shortId: selectedCommit.shortId }}
-              file={openFile}
-              onClose={() => setOpenFile(null)}
-            />
-          )}
-          {openWorkingFile && !openFile && (
-            <FileDiff
-              path={path}
-              source={{ kind: openWorkingFile.staged ? "staged" : "unstaged" }}
-              file={{ path: openWorkingFile.path, status: openWorkingFile.status }}
-              refreshKey={graphKey}
-              onChanged={reload} // a staged or discarded hunk changes the staging lists and the graph
-              onClose={() => setOpenWorkingFile(null)}
-            />
-          )}
-        </div>
-        <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
           {rebasing && (
             <InteractiveRebase
               path={path}
               base={rebasing}
-              onClose={() => setRebasing(null)}
+              onCancel={cancelRebase}
               onApplied={() => {
                 setRebasing(null);
                 closeCommit(); // the reworded commits (and the ones after them) have new ids
@@ -225,7 +235,9 @@ export default function RepoView({
               }}
             />
           )}
-          {!rebasing && renaming && (
+        </div>
+        <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
+          {renaming && (
             <RenameCommit
               path={path}
               commit={renaming}
@@ -237,7 +249,7 @@ export default function RepoView({
               }}
             />
           )}
-          {!rebasing && !renaming && selectedCommit && (
+          {!renaming && selectedCommit && (
             <CommitDetail
               path={path}
               commit={selectedCommit}
@@ -254,9 +266,10 @@ export default function RepoView({
           <Changes
             path={path}
             refreshKey={graphKey}
-            hidden={rebasing !== null || renaming !== null || selectedCommit !== null}
+            hidden={renaming !== null || selectedCommit !== null}
             selected={openWorkingFile && { path: openWorkingFile.path, staged: openWorkingFile.staged }}
-            onSelectFile={setOpenWorkingFile}
+            // A diff would open underneath the rebase screen.
+            onSelectFile={(f) => !rebasing && setOpenWorkingFile(f)}
             onCommitted={() => {
               setOpenWorkingFile(null); // what was committed no longer has a working diff
               reload();

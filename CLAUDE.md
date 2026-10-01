@@ -134,12 +134,15 @@ app rename so users keep their data. Don't change it casually.
   after a successful manual fetch/pull/push. Uses `--no-write-fetch-head --no-auto-gc`, 90 s timeout.
 - **Amend** switch pre-fills the last message, keeps the author, makes you the committer, works with
   nothing staged, warns when the commit is already pushed.
-- **Interactive rebase** (graph context menu, `features/rebase/InteractiveRebase` in the right panel, priority
-  Rebase > Rename > CommitDetail > Changes): the clicked commit is the base and is not edited; `rebase_plan` lists the
-  commits after it on HEAD's first-parent line (max 500, newest first) plus `headId`. Only **reword** exists so far:
-  `reword_commits` rebuilds from the oldest changed commit with `rebuild_with_messages` (the same code Rename uses; no
-  cherry-picks, trees untouched, so no conflicts and no clean working directory needed) and refuses when HEAD moved since
-  the plan. Pick/squash/drop/reorder would need real replays (see Drop commit) and are not built.
+- **Interactive rebase** (graph context menu, `features/rebase/InteractiveRebase`): a full screen that covers the sidebar
+  and the centre (`RepoView` wraps both in `.workarea`; they stay mounted, `visibility: hidden` + `inert`, so the graph
+  keeps its scroll position); the right panel stays and shows `Changes` (opening a working diff is ignored meanwhile).
+  The clicked commit is the base and is not edited; `rebase_plan` lists the commits after it on HEAD's first-parent line
+  (max 500, newest first) plus `headId`. Each row has an action `<select>`: **pick** and **reword** (a `Modal` popup;
+  a commit only becomes "reword" when the popup is confirmed). `reword_commits` rebuilds from the oldest reworded commit
+  with `rebuild_with_messages` (the same code Rename uses; no cherry-picks, trees untouched, so no conflicts and no clean
+  working directory needed) and refuses when HEAD moved since the plan. New actions (squash, drop, reorder) need real
+  replays (see Drop commit) and belong in the same `ACTIONS` list.
 - **Rename commit** (graph context menu) only for commits on the current branch. Rebuilds the commit and
   every later commit with identical trees/authors/dates, then moves the branch; other branches keep the old
   history. Warns about rewritten descendants and pushed commits.
