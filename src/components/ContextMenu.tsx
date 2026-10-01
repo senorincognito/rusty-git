@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export interface MenuItem {
@@ -8,6 +8,10 @@ export interface MenuItem {
   /** Shown as a tooltip, e.g. to explain why an item is disabled. */
   title?: string;
   danger?: boolean;
+  /** Shows a check mark (or an empty gutter) before the label, like a toggle or radio item. */
+  checked?: boolean;
+  /** Draws a dividing line above this item. */
+  separatorBefore?: boolean;
 }
 
 /** Floating menu at a screen position. Closes on outside click, Escape, scroll or blur. */
@@ -23,6 +27,7 @@ export default function ContextMenu({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const hasChecks = items.some((i) => i.checked !== undefined);
   const [pos, setPos] = useState({ left: x, top: y });
 
   // Keep the menu inside the window.
@@ -65,19 +70,27 @@ export default function ContextMenu({
       onContextMenu={(e) => e.preventDefault()}
     >
       {items.map((item) => (
-        <button
-          key={item.label}
-          role="menuitem"
-          className={"ctxitem" + (item.danger ? " danger" : "")}
-          disabled={item.disabled}
-          title={item.title}
-          onClick={() => {
-            onClose();
-            item.onClick();
-          }}
-        >
-          {item.label}
-        </button>
+        <Fragment key={item.label}>
+          {item.separatorBefore && <div className="ctxsep" role="separator" />}
+          <button
+            role={hasChecks ? "menuitemcheckbox" : "menuitem"}
+            aria-checked={hasChecks ? !!item.checked : undefined}
+            className={"ctxitem" + (item.danger ? " danger" : "")}
+            disabled={item.disabled}
+            title={item.title}
+            onClick={() => {
+              onClose();
+              item.onClick();
+            }}
+          >
+            {hasChecks && (
+              <span className="ctxcheck" aria-hidden="true">
+                {item.checked ? "✓" : ""}
+              </span>
+            )}
+            {item.label}
+          </button>
+        </Fragment>
       ))}
     </div>,
     document.body,

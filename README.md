@@ -71,6 +71,11 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 - Title-bar buttons run the system `git`, so your credential helper and SSH setup apply.
 - Fetch updates all remotes (with prune). Pull is fast-forward only, so it never creates a
   surprise merge. Push publishes a new branch to `origin` and sets its upstream.
+- **Auto-fetch** (on by default, every 3 minutes): fetches in the background while the window
+  is focused, and right away when you come back to a stale repo. It never overlaps another
+  git operation, stays silent (a small spinner shows while it runs), backs off when the
+  remote is unreachable, and pauses instead of retrying when credentials are needed. Switch it
+  off or pick 1 / 3 / 5 / 10 minutes from the ▾ next to Fetch (or right-click Fetch).
 - **Force push**: right-click the Push button, or click the small ▾ beside it. It asks for
   confirmation first (and says how many remote commits will be discarded), then runs
   `git push --force-with-lease`, which is refused if the remote moved since your last fetch.

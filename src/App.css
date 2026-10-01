@@ -977,3 +977,58 @@ body.resizing {
   border-bottom-left-radius: 0;
   font-size: 10px;
 }
+
+/* Check-mark gutter and divider in context menus */
+.ctxitem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctxcheck {
+  flex: none;
+  width: 14px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.ctxsep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+/* Background-fetch indicator next to the Fetch button */
+.autofetch {
+  align-self: center;
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: default;
+}
+
+.autofetch.fetching {
+  color: var(--accent);
+  animation: autofetch-spin 1.1s linear infinite;
+}
+
+.autofetch.auth {
+  color: var(--danger);
+}
+
+.autofetch.waiting {
+  color: #e0a64a;
+}
+
+@keyframes autofetch-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .autofetch.fetching {
+    animation: none;
+  }
+}

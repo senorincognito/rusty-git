@@ -1,4 +1,6 @@
+use std::io::Read;
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use git2::{BranchType, Repository};
 use serde::Serialize;
@@ -46,20 +48,32 @@ fn sync_status(repo: &Repository) -> Result<SyncStatus, String> {
 
 /// Runs the system `git` so the user's credential helpers, SSH agent and config all apply.
 pub(crate) fn run_git(path: &str, args: &[&str]) -> Result<String, String> {
+    run_git_with(path, args, None)
+}
+
+/// Like [`run_git`], but kills git and fails if it takes longer than `timeout`.
+pub(crate) fn run_git_with(path: &str, args: &[&str], timeout: Option<Duration>) -> Result<String, String> {
     let mut cmd = Command::new("git");
     cmd.arg("-C")
         .arg(path)
         .args(args)
         // Fail instead of waiting for a password on a terminal that doesn't exist.
         .env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null());
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0); // own group, so a timeout can take down git's helpers too
+    }
 
-    let out = cmd.output().map_err(|e| {
+    let mut child = cmd.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
             "git executable not found. Install Git and make sure it is on your PATH.".to_string()
         } else {
@@ -67,17 +81,67 @@ pub(crate) fn run_git(path: &str, args: &[&str]) -> Result<String, String> {
         }
     })?;
 
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    // Drain both pipes on their own threads so a chatty git can never block on a full pipe.
+    fn drain(pipe: Option<impl Read + Send + 'static>) -> std::thread::JoinHandle<Vec<u8>> {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(mut p) = pipe {
+                let _ = p.read_to_end(&mut buf);
+            }
+            buf
+        })
+    }
+    let (out_pipe, err_pipe) = (child.stdout.take(), child.stderr.take());
+
+    let out_reader = drain(out_pipe);
+    let err_reader = drain(err_pipe);
+    let deadline = timeout.map(|t| Instant::now() + t);
+    let status = loop {
+        match child.try_wait().map_err(|e| e.to_string())? {
+            Some(status) => break Some(status),
+            None if deadline.is_some_and(|d| Instant::now() >= d) => {
+                kill_tree(&mut child);
+                break None;
+            }
+            None => std::thread::sleep(Duration::from_millis(40)),
+        }
+    };
+    let Some(status) = status else {
+        return Err(format!("git {} timed out after {}s", args.first().unwrap_or(&""), timeout.map_or(0, |t| t.as_secs())));
+    };
+    // Only now that git has exited are the pipes guaranteed to close.
+    let stdout = String::from_utf8_lossy(&out_reader.join().unwrap_or_default()).into_owned();
+    let stderr = String::from_utf8_lossy(&err_reader.join().unwrap_or_default()).into_owned();
+
     // git reports progress and most messages on stderr.
     let text = format!("{}\n{}", stdout.trim(), stderr.trim()).trim().to_string();
-    if out.status.success() {
+    if status.success() {
         Ok(text)
     } else if text.is_empty() {
-        Err(format!("git {} failed ({})", args.first().unwrap_or(&""), out.status))
+        Err(format!("git {} failed ({})", args.first().unwrap_or(&""), status))
     } else {
         Err(text)
     }
+}
+
+/// Kills `child` and everything it spawned (git starts helpers such as git-remote-https and
+/// ssh, which would otherwise live on and keep the connection and our output pipes open).
+fn kill_tree(child: &mut std::process::Child) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .creation_flags(0x0800_0000)
+            .output();
+    }
+    #[cfg(unix)]
+    {
+        // A negative pid addresses the whole process group created at spawn.
+        let _ = Command::new("kill").args(["-KILL", &format!("-{}", child.id())]).output();
+    }
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn open(path: &str) -> Result<Repository, String> {
@@ -125,6 +189,73 @@ fn push(path: &str) -> Result<String, String> {
     run_git(path, &["push", "--set-upstream", remote, "HEAD"])
 }
 
+/// Result of a background fetch. It never fails as a command: the frontend decides what to do
+/// from `status`: "ok", "none" (no remotes), "auth" (credentials needed), "offline" or "error".
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoFetchOutcome {
+    pub status: &'static str,
+    pub message: String,
+}
+
+/// Sorts a git error message into something the auto-fetch scheduler can react to.
+fn classify_fetch_error(message: &str) -> &'static str {
+    let m = message.to_lowercase();
+    let any = |needles: &[&str]| needles.iter().any(|n| m.contains(n));
+    if any(&[
+        "authentication failed",
+        "could not read username",
+        "could not read password",
+        "terminal prompts disabled",
+        "permission denied (publickey",
+        "invalid username or password",
+        "requested url returned error: 401",
+        "requested url returned error: 403",
+        "repository not found",
+    ]) {
+        "auth"
+    } else if any(&[
+        "could not resolve host",
+        "could not resolve hostname",
+        "unable to access",
+        "connection timed out",
+        "connection refused",
+        "connection reset",
+        "network is unreachable",
+        "failed to connect",
+        "could not connect",
+        "operation timed out",
+        "timed out after",
+        "temporary failure in name resolution",
+    ]) {
+        "offline"
+    } else {
+        "error"
+    }
+}
+
+/// Quiet background fetch: no pruning, and no write to FETCH_HEAD (so the repo watcher doesn't
+/// see a change when nothing arrived) or background maintenance. A hung connection is cut off.
+fn auto_fetch(path: &str) -> AutoFetchOutcome {
+    let outcome = |status, message: String| AutoFetchOutcome { status, message };
+    match open(path).and_then(|r| sync_status(&r)) {
+        Ok(s) if !s.has_remote => return outcome("none", String::new()),
+        Err(e) => return outcome("error", e),
+        Ok(_) => {}
+    }
+
+    let timeout = Some(Duration::from_secs(90));
+    let mut result = run_git_with(path, &["fetch", "--all", "--no-write-fetch-head", "--no-auto-gc"], timeout);
+    // Older git versions don't know those flags: fall back to a plain fetch.
+    if matches!(&result, Err(e) if e.to_lowercase().contains("unknown option")) {
+        result = run_git_with(path, &["fetch", "--all"], timeout);
+    }
+    match result {
+        Ok(_) => outcome("ok", String::new()),
+        Err(e) => outcome(classify_fetch_error(&e), e),
+    }
+}
+
 /// Overwrites the upstream with the local branch, e.g. after an amend or rename. Uses
 /// --force-with-lease, so it refuses if the remote branch moved since the last fetch (somebody
 /// else's commits are never thrown away unseen).
@@ -165,6 +296,11 @@ pub async fn git_pull(path: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn git_push(path: String) -> Result<String, String> {
     blocking(move || push(&path)).await
+}
+
+#[tauri::command]
+pub async fn git_auto_fetch(path: String) -> Result<AutoFetchOutcome, String> {
+    blocking(move || Ok(auto_fetch(&path))).await
 }
 
 #[tauri::command]
@@ -294,6 +430,78 @@ mod tests {
         fetch(ap).unwrap();
         force_push(ap).unwrap();
         assert_eq!(remote_main(), head(&a));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn fetch_errors_are_classified() {
+        for m in [
+            "fatal: Authentication failed for 'https://github.com/x/y.git/'",
+            "fatal: could not read Username for 'https://github.com': terminal prompts disabled",
+            "git@github.com: Permission denied (publickey).",
+            "remote: Repository not found.",
+        ] {
+            assert_eq!(classify_fetch_error(m), "auth", "{m}");
+        }
+        for m in [
+            "fatal: unable to access 'https://x/': Could not resolve host: x",
+            "ssh: connect to host x port 22: Connection timed out",
+            "git fetch timed out after 90s",
+        ] {
+            assert_eq!(classify_fetch_error(m), "offline", "{m}");
+        }
+        assert_eq!(classify_fetch_error("fatal: something else entirely"), "error");
+    }
+
+    #[test]
+    fn run_git_with_kills_slow_commands() {
+        let dir = tmp("timeout");
+        git(&dir, &["init", "-q"]);
+        // A fast command finishes well inside the limit.
+        assert!(run_git_with(dir.to_str().unwrap(), &["status"], Some(Duration::from_secs(30))).is_ok());
+        // An alias that sleeps is cut off after the timeout.
+        #[cfg(windows)]
+        let slow = "alias.slow=!powershell -NoProfile -Command Start-Sleep -Seconds 20";
+        #[cfg(not(windows))]
+        let slow = "alias.slow=!sleep 20";
+        let started = Instant::now();
+        let e = run_git_with(dir.to_str().unwrap(), &["-c", slow, "slow"], Some(Duration::from_millis(500)))
+            .unwrap_err();
+        assert!(e.contains("timed out"), "{e}");
+        assert!(started.elapsed() < Duration::from_secs(15));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn auto_fetch_updates_refs_quietly() {
+        let base = tmp("autofetch");
+        let origin = base.join("origin.git");
+        let (a, b) = (base.join("a"), base.join("b"));
+        fs::create_dir_all(&a).unwrap();
+        git(&base, &["init", "-q", "--bare", "-b", "main", origin.to_str().unwrap()]);
+        git(&a, &["init", "-q", "-b", "main"]);
+        // No remote yet: nothing to do.
+        assert_eq!(auto_fetch(a.to_str().unwrap()).status, "none");
+        git(&a, &["remote", "add", "origin", origin.to_str().unwrap()]);
+        commit_file(&a, "f.txt", "one");
+        push(a.to_str().unwrap()).unwrap();
+        git(&base, &["clone", "-q", origin.to_str().unwrap(), b.to_str().unwrap()]);
+        let bp = b.to_str().unwrap();
+
+        commit_file(&a, "f.txt", "two");
+        push(a.to_str().unwrap()).unwrap();
+        assert_eq!(sync_status(&open(bp).unwrap()).unwrap().behind, 0);
+
+        let outcome = auto_fetch(bp);
+        assert_eq!(outcome.status, "ok", "{}", outcome.message);
+        assert_eq!(sync_status(&open(bp).unwrap()).unwrap().behind, 1);
+        // Quiet: FETCH_HEAD is not written, so the repo watcher stays silent when nothing changed.
+        assert!(!b.join(".git").join("FETCH_HEAD").exists());
+
+        // An unreachable remote is reported, not thrown.
+        git(&b, &["remote", "set-url", "origin", base.join("missing.git").to_str().unwrap()]);
+        assert_ne!(auto_fetch(bp).status, "ok");
 
         let _ = fs::remove_dir_all(&base);
     }
