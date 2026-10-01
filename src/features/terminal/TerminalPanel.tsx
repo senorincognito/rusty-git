@@ -69,6 +69,10 @@ export default function TerminalPanel({
         foreground: "#e4e6eb",
         cursor: "#3fa7a0",
         selectionBackground: "#3fa7a055",
+        // The terminal draws its own scrollbar: same colours as the rest of the app (--muted #8b90a0).
+        scrollbarSliderBackground: "#8b90a059",
+        scrollbarSliderHoverBackground: "#8b90a0a6",
+        scrollbarSliderActiveBackground: "#8b90a0a6",
       },
     });
     const f = new FitAddon();

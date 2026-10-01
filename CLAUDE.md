@@ -314,6 +314,9 @@ separate CSS step.
   `BranchButton`; `Sidebar.scss` serves everything in `features/sidebar/`.
 - **Theme colours stay CSS custom properties** (`--bg`, `--accent`, ...) so they can change at runtime; the SCSS
   tokens (`$bg`, `$accent`) just expand to `var(--bg)` etc. Use a token or mixin before inventing a new value.
+- Scrollbars are styled globally in `_base.scss` (thin `::-webkit-scrollbar`, thumb = `--muted` at 35% via `color-mix`, plus
+  `color-scheme: dark`; the standard `scrollbar-*` properties only as a fallback because Chromium ignores the webkit
+  pseudo-elements once those are set). The xterm terminal draws its own scrollbar, coloured through its `theme`.
 - Focusable list rows (`li[tabindex]`) have no focus outline (`_base.scss`): the selection highlight is the indicator.
 - Class names are global (no CSS modules), so keep them specific to their feature. Within a file, keep the order
   hover, then selected, then "menu open" (`.ctx`): equal-specificity rules rely on source order.

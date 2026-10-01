@@ -11,6 +11,9 @@
   --accent: #3fa7a0;
   --danger: #e5646b;
 
+  // Native controls (scrollbars, the select dropdown, form fields) draw themselves dark.
+  color-scheme: dark;
+
   font-family: Inter, "Segoe UI", system-ui, sans-serif;
   font-size: 14px;
   color: $text;
@@ -23,6 +26,44 @@
 
 body {
   margin: 0;
+}
+
+// ---- Scrollbars: thin, rounded and quiet, in the theme's muted colour ----
+// The thumb is padded by a transparent border (so it is 6px wide inside a 10px track) and brightens on hover.
+$scroll-thumb: color-mix(in srgb, var(--muted) 35%, transparent);
+$scroll-thumb-hover: color-mix(in srgb, var(--muted) 65%, transparent);
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  min-height: 32px;
+  min-width: 32px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: $scroll-thumb;
+  background-clip: content-box;
+
+  &:hover,
+  &:active {
+    background: $scroll-thumb-hover;
+    background-clip: content-box;
+  }
+}
+
+// Engines without the WebKit pseudo-elements get the standard properties instead.
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: $scroll-thumb transparent;
+  }
 }
 
 button {
