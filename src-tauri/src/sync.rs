@@ -176,17 +176,9 @@ fn push(path: &str) -> Result<String, String> {
     if s.upstream.is_some() {
         return run_git(path, &["push"]);
     }
-    // First push of a new branch: publish it and start tracking it.
-    let remotes = repo.remotes().map_err(err)?;
-    // StringArray items are Result<Option<&str>>; skip entries that aren't valid UTF-8.
-    let names: Vec<&str> = remotes.iter().flatten().flatten().collect();
-    let remote = names
-        .iter()
-        .copied()
-        .find(|r| *r == "origin")
-        .or_else(|| names.first().copied())
-        .ok_or("No remotes configured for this repository")?;
-    run_git(path, &["push", "--set-upstream", remote, "HEAD"])
+    // First push of a new branch: publish it to the target remote and start tracking it.
+    let remote = crate::remotes::target_remote(&repo).ok_or("No remotes configured for this repository")?;
+    run_git(path, &["push", "--set-upstream", &remote, "HEAD"])
 }
 
 #[derive(Serialize, Debug, PartialEq)]

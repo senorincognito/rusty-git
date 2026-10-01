@@ -130,10 +130,14 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   checkout: refused if uncommitted changes would be overwritten).
 - **Branch** button: create a branch from the current commit and check it out; the name is
   validated and uncommitted changes carry over.
-- **Remotes**: shows `origin` with its URL (right-click it and choose *Edit URL* to change where origin points; Enter saves,
-  Esc cancels, and the remote branches stay until the next fetch) and remote branches. A yellow ⚠ beside the name means the last fetch failed (hover it for git's message); it
-  disappears after the next successful fetch, pull or background fetch. When there is no origin yet,
-  a form adds one.
+- **Remotes**: every remote of the repository with its URL and remote branches. The **⋯** button in the section's headline opens a menu with
+  *Add remote…* (a name and URL form; shown right away when there is none yet) and, with several remotes, a *Target
+  remote* group to pick the target. Right-click a remote's header for *Set as target*, *Edit URL* (Enter
+  saves, Esc cancels; the remote branches stay until the next fetch) and *Remove remote*. The **target** remote (marked
+  when there are several; the one you chose, else `origin`, else the first) is where **Push** publishes a branch that has no upstream yet;
+  branches that already track something keep pushing and pulling there. Removing a remote asks first and only changes
+  this repository's settings (its remote-tracking branches go, local branches that tracked it lose their upstream; nothing on the server is touched). A yellow ⚠ beside a remote's name means the last fetch
+  failed (hover it for git's message); it disappears after the next successful fetch, pull or background fetch.
 - **Context menus** on branches: *Rename branch* and *Delete branch* (both disabled for the
   checked-out branch), and *Rename remote branch* and *Delete remote branch* (both disabled for
   the branch the checked-out branch tracks). Renaming edits the name inline (Enter confirms,
@@ -186,7 +190,6 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 - Tags in the sidebar, remote branch checkout
 - Applying a stash without removing it
 - Merge / rebase, rename branch, push or pull from the context menu
-- Multiple remotes (only `origin` is handled)
 - Discard changes
 - Renames are shown as a delete plus an add
 
@@ -269,7 +272,7 @@ Backend (`src-tauri/src/`), one module per concern, each with tests where it has
 | `graph.rs` | Commit walk, ref labels, lane layout |
 | `changes.rs` | Status, stage / unstage, create commit |
 | `branches.rs` | Local branches, create / checkout / delete |
-| `remotes.rs` | Origin info, add origin, change origin URL, delete remote branch |
+| `remotes.rs` | Remotes: list, add, change URL, remove, target remote; delete and rename remote branches |
 | `sync.rs` | Fetch / pull / push via system git, ahead/behind |
 | `terminal.rs` | Pseudo-terminal sessions |
 | `watch.rs` | Watches `.git` and emits `repo-changed` for live reload |
@@ -283,7 +286,7 @@ Frontend (`src/`). `@/` is an alias for `src/` (see `tsconfig.json` and `vite.co
 | `features/repo/` | `RepoView`: the screen for an open repository (layout, live reload, shortcuts) |
 | `features/graph/` | Virtualised commit graph |
 | `features/changes/` | Staging and commit panel |
-| `features/sidebar/` | Local branches, remotes, add origin |
+| `features/sidebar/` | Local branches, remotes (add, edit, remove), stashes |
 | `features/toolbar/` | Title-bar buttons: fetch / pull / push, new branch |
 | `features/terminal/` | xterm.js terminal panel |
 | `components/` | Generic UI with no git knowledge: context menu, resizable panel, collapsible section |

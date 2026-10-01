@@ -43,7 +43,7 @@ say plainly that UI behaviour is untested in the running app.
 | `commit_detail.rs` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
 | `history.rs` | `get_rename_info`, `rename_commit_message` (rewrites the commit and its descendants); `is_pushed` |
 | `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
-| `remotes.rs` | `origin` info, add origin, `set_origin_remote_url` (right-click the origin header; reuses `BranchNameInput`), delete and rename remote branches |
+| `remotes.rs` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
 | `sync.rs` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
 | `stash.rs` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `pop_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
 | `terminal.rs` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
@@ -142,6 +142,14 @@ app rename so users keep their data. Don't change it casually.
   line). It is plain `git2` `reset` (Soft/Mixed/Hard), also allowed on a detached HEAD, refused during a merge/rebase
   and on an empty repo. Hard leaves untracked files alone; only uncommitted changes are unrecoverable (removed commits
   stay in the reflog).
+- **Multiple remotes**: the sidebar lists every remote (`Remotes.tsx`, one block each); adding one and choosing the target
+  live in the "⋯" menu of the section headline (`Section`'s `action` prop; its mouse-down stops propagation like the split buttons). The **target remote**
+  (`remotes::target_remote`) is where Push publishes a branch without an upstream (`push --set-upstream`): the one the user
+  chose (repo-local git config `rustygit.targetremote`), else `origin`, else the first remote; deleting the target clears the
+  choice. Everything else already follows each branch's own upstream (fetch is `--all`, pull/push use `branch.<n>.remote`).
+  Removing a remote (`remote_delete`) drops its remote-tracking refs and the upstream of branches that tracked it, never
+  touches the server, and confirms first. Names are checked with `Remote::is_valid_name`. The fetch-failure ⚠ shows on every
+  remote because the fetch covers all of them.
 - **Branch rename** (inline editor in the sidebar) is not allowed for the checked-out branch (local) or the
   branch the checked-out branch tracks (remote). Remote rename = one atomic push of the new name plus
   deletion of the old one, guarded by a lease; local branches that tracked it are repointed.
@@ -320,7 +328,6 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 ## Not implemented yet
 
 Tags in the sidebar; applying a stash without removing it; line-level (single line) staging and unstaging; checkout of remote branches; merge/rebase as standalone actions; discard
-changes and stash; conflict resolution UI (pulls with conflicts are aborted); multiple remotes (only
-`origin`); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
+changes and stash; conflict resolution UI (pulls with conflicts are aborted); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
 (`git merge-tree`) before pulling; keyboard navigation in the graph.

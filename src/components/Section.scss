@@ -1,15 +1,21 @@
 @use "@/styles/core" as *;
 
 // Collapsible box in the left panel.
+.sidebox-headrow {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid $border;
+}
+
 .sidebox-head {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
   background: none;
   border: 0;
-  border-bottom: 1px solid $border;
   @include section-label;
   text-align: left;
 
@@ -19,6 +25,23 @@
 
   .count {
     margin-left: auto;
+  }
+}
+
+// The "⋯" button at the right end of the headline.
+.sidebox-action {
+  flex: none;
+  padding: 0 10px;
+  background: none;
+  border: 0;
+  color: $muted;
+  font-size: 14px;
+  line-height: 1;
+
+  &:hover,
+  &.active {
+    color: $text;
+    background: $press-tint;
   }
 }
 

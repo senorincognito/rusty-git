@@ -113,6 +113,18 @@
   font-weight: 600;
 }
 
+// Marks the remote that new branches are pushed to (shown when there are several).
+.rtarget {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid $accent;
+  border-radius: $radius-sm;
+  color: $accent;
+  font-size: 10px;
+  font-weight: 500;
+  vertical-align: 1px;
+}
+
 // Warning beside the remote's name when fetching fails.
 .rwarn {
   margin-left: 6px;
@@ -126,7 +138,7 @@
   font-size: 11px;
 }
 
-// Form shown when the repository has no origin yet.
+// Form that adds a remote (the only content while the repository has none).
 .addremote {
   display: flex;
   flex-direction: column;
@@ -141,4 +153,9 @@
   input {
     @include text-field;
   }
+}
+
+.addremote-actions {
+  display: flex;
+  gap: 8px;
 }
