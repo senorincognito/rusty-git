@@ -36,6 +36,8 @@ pub struct CommitDetail {
     pub parents: Vec<String>,
     /// Changes are shown relative to the first parent, like most Git GUIs do for merges.
     pub is_merge: bool,
+    /// "stash@{n}" when this commit is a stash.
+    pub stash: Option<String>,
     pub files: Vec<CommitFile>,
     pub total_files: usize,
     pub truncated: bool,
@@ -51,6 +53,7 @@ fn commit_detail(repo: &Repository, id: &str) -> Result<CommitDetail, String> {
     let tree = commit.tree().map_err(err)?;
     // The root commit has no parent: everything in it counts as added.
     let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
+    let stash_index = crate::stash::stash_index_of(repo, oid);
 
     let mut opts = DiffOptions::new();
     opts.include_typechange(true);
@@ -83,6 +86,19 @@ fn commit_detail(repo: &Repository, id: &str) -> Result<CommitDetail, String> {
             Some(CommitFile { path, old_path, status })
         })
         .collect();
+    // A stash keeps its untracked files in a separate commit; list them as additions.
+    if let Some(untracked) = crate::stash::untracked_tree(repo, &commit) {
+        let extra = repo.diff_tree_to_tree(None, Some(&untracked), None).map_err(err)?;
+        for d in extra.deltas() {
+            if let Some(p) = d.new_file().path() {
+                files.push(CommitFile {
+                    path: p.to_string_lossy().replace('\\', "/"),
+                    old_path: None,
+                    status: "new",
+                });
+            }
+        }
+    }
     files.sort_by(|a, b| a.path.to_lowercase().cmp(&b.path.to_lowercase()).then_with(|| a.path.cmp(&b.path)));
     let total_files = files.len();
     files.truncate(MAX_FILES);
@@ -103,8 +119,14 @@ fn commit_detail(repo: &Repository, id: &str) -> Result<CommitDetail, String> {
         author: author.name().unwrap_or("").to_string(),
         email: author.email().unwrap_or("").to_string(),
         time: commit.time().seconds(),
-        parents: commit.parent_ids().map(|p| p.to_string()[..7].to_string()).collect(),
-        is_merge: commit.parent_count() > 1,
+        // A stash's other parents (saved index, untracked files) are internal: only show its base.
+        parents: commit
+            .parent_ids()
+            .take(if stash_index.is_some() { 1 } else { usize::MAX })
+            .map(|p| p.to_string()[..7].to_string())
+            .collect(),
+        is_merge: commit.parent_count() > 1 && stash_index.is_none(),
+        stash: stash_index.map(|i| format!("stash@{{{i}}}")),
         truncated: total_files > files.len(),
         files,
         total_files,
@@ -232,7 +254,16 @@ fn file_diff(
         diff.find_similar(Some(&mut find)).map_err(err)?;
     }
 
-    render_diff(&diff, full_file)
+    let out = render_diff(&diff, full_file)?;
+    // A stash keeps its untracked files in a separate commit; a file only found there shows as added.
+    if out.lines.is_empty() && !out.binary {
+        if let Some(untracked) = crate::stash::untracked_tree(repo, &commit) {
+            let mut opts = diff_options(path, None, full_file);
+            let diff = repo.diff_tree_to_tree(None, Some(&untracked), Some(&mut opts)).map_err(err)?;
+            return render_diff(&diff, full_file);
+        }
+    }
+    Ok(out)
 }
 
 /// The message, author and changed files of a commit.
@@ -464,6 +495,38 @@ mod tests {
         let bin = working_diff(&repo, "bin.dat", false, true).unwrap();
         assert!(bin.binary && bin.lines.is_empty());
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stash_detail_lists_untracked_files_and_hides_internal_parents() {
+        let dir = std::env::temp_dir().join(format!("gc-stashdetail-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let mut repo = Repository::init(&dir).unwrap();
+        let mut cfg = repo.config().unwrap();
+        cfg.set_str("user.name", "S").unwrap();
+        cfg.set_str("user.email", "s@example.com").unwrap();
+
+        fs::write(dir.join("a.txt"), "one").unwrap();
+        let c1 = commit_all(&repo, "base", &[]);
+        fs::write(dir.join("a.txt"), "two").unwrap();
+        fs::write(dir.join("new.txt"), "untracked\nfile\n").unwrap();
+        let stash = crate::stash::save_stash(&mut repo, Some("wip")).unwrap();
+
+        let d = commit_detail(&repo, &stash.to_string()).unwrap();
+        assert_eq!(d.stash.as_deref(), Some("stash@{0}"));
+        assert_eq!(d.parents, [c1.to_string()[..7].to_string()]);
+        assert!(!d.is_merge);
+        assert_eq!(statuses(&d), [("a.txt".into(), "modified"), ("new.txt".into(), "new")]);
+
+        // The untracked file's content can be viewed like any other added file.
+        let diff = file_diff(&repo, &stash.to_string(), "new.txt", None, true).unwrap();
+        assert_eq!((diff.additions, diff.deletions), (2, 0));
+        let tracked = file_diff(&repo, &stash.to_string(), "a.txt", None, true).unwrap();
+        assert_eq!((tracked.additions, tracked.deletions), (1, 1));
+
+        // An ordinary commit has no stash name.
+        assert_eq!(commit_detail(&repo, &c1.to_string()).unwrap().stash, None);
         let _ = fs::remove_dir_all(&dir);
     }
 }

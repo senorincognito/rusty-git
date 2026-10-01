@@ -39,7 +39,11 @@ function RowGraph({ row, width }: { row: GraphRow; width: number }) {
       {row.through.map((e, i) => line(e, curve(x(e.col), 0, x(e.col), ROW_H), `t${i}`))}
       {row.top.map((e, i) => line(e, curve(x(e.col), 0, cx, mid), `u${i}`))}
       {row.bottom.map((e, i) => line(e, curve(cx, mid, x(e.col), ROW_H), `b${i}`))}
-      <circle cx={cx} cy={mid} r={NODE_R} fill={color(row.color)} stroke="var(--bg)" strokeWidth={2} />
+      {row.isStash ? (
+        <circle cx={cx} cy={mid} r={NODE_R} fill="var(--bg)" stroke={color(row.color)} strokeWidth={2} />
+      ) : (
+        <circle cx={cx} cy={mid} r={NODE_R} fill={color(row.color)} stroke="var(--bg)" strokeWidth={2} />
+      )}
     </svg>
   );
 }
@@ -159,7 +163,11 @@ export default function Graph({
             {
               label: "Rename commit",
               disabled: !menu.row.onHead,
-              title: menu.row.onHead ? undefined : "Only commits on the current branch can be renamed",
+              title: menu.row.onHead
+                ? undefined
+                : menu.row.isStash
+                  ? "A stash can't be renamed"
+                  : "Only commits on the current branch can be renamed",
               onClick: () => onRenameCommit({ id: menu.row.id, shortId: menu.row.shortId }),
             },
           ]}

@@ -96,7 +96,13 @@ export default function RepoView({
         </button>
       </header>
       <div className="body">
-        <Sidebar path={path} refreshKey={graphKey} onChanged={reload} />
+        <Sidebar
+          path={path}
+          refreshKey={graphKey}
+          onChanged={reload}
+          selectedId={selectedCommit?.id ?? null}
+          onSelectCommit={selectCommit}
+        />
         <div className="center">
           {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
           <div className={"center-pane" + (openFile || openWorkingFile ? " hidden" : "")}>

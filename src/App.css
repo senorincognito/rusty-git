@@ -1388,3 +1388,56 @@ body.resizing {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Stashes */
+.ref.stash {
+  background: #4a3a2a;
+  color: #f0b07a;
+}
+
+.stashlist li {
+  cursor: pointer;
+}
+
+.stashlist li.selected {
+  background: rgba(63, 167, 160, 0.18);
+}
+
+.stash-idx {
+  flex: none;
+  color: #f0b07a;
+  font-size: 11px;
+}
+
+.stash-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stash-form p {
+  margin: 0;
+}
+
+.stash-form input {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.stash-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.commit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.commit-actions .primary {
+  flex: 1;
+}

@@ -1,0 +1,22 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export interface StashEntry {
+  /** Position in the list: 0 is the newest ("stash@{0}"). */
+  index: number;
+  id: string;
+  shortId: string;
+  /** "WIP on main: abc1234 subject", or "On main: <your message>". */
+  message: string;
+  /** Unix seconds. */
+  time: number;
+}
+
+/** All stashes, newest first. */
+export const getStashes = (path: string) => invoke<StashEntry[]>("get_stashes", { path });
+
+/**
+ * Moves every uncommitted change (staged, unstaged and untracked files) into a new stash and
+ * cleans the working directory. Resolves to the stash commit's id.
+ */
+export const createStash = (path: string, message: string | null) =>
+  invoke<string>("create_stash", { path, message });

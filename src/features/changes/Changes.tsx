@@ -11,6 +11,7 @@ import {
 } from "@/api/changes";
 import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import StashDialog from "./StashDialog";
 
 function FileList(props: {
   title: string;
@@ -92,6 +93,7 @@ export default function Changes({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [amend, setAmend] = useState(false);
+  const [stashOpen, setStashOpen] = useState(false);
   const [head, setHead] = useState<HeadCommit | null>(null);
   const draft = useRef(""); // the message typed before switching amend on
 
@@ -251,11 +253,32 @@ export default function Changes({
           rows={4}
         />
         {error && <p className="error">{error}</p>}
-        <button className="primary" disabled={!canCommit} onClick={commit}>
-          {amend ? "Amend commit" : "Commit"}
-          {staged.length > 0 ? ` (${staged.length})` : ""}
-        </button>
+        <div className="commit-actions">
+          <button
+            className="secondary"
+            disabled={busy || changes.length === 0}
+            onClick={() => setStashOpen(true)}
+            title="Move all uncommitted changes, including untracked files, into a stash"
+          >
+            Stash…
+          </button>
+          <button className="primary" disabled={!canCommit} onClick={commit}>
+            {amend ? "Amend commit" : "Commit"}
+            {staged.length > 0 ? ` (${staged.length})` : ""}
+          </button>
+        </div>
       </div>
+      {stashOpen && (
+        <StashDialog
+          path={path}
+          fileCount={changes.length}
+          onClose={() => setStashOpen(false)}
+          onStashed={() => {
+            setStashOpen(false);
+            onCommitted(); // reloads everything; also closes an open working-tree diff
+          }}
+        />
+      )}
     </aside>
   );
 }

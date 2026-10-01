@@ -5,6 +5,7 @@ mod graph;
 mod history;
 mod remotes;
 mod repo;
+mod stash;
 mod sync;
 mod terminal;
 mod watch;
@@ -42,6 +43,8 @@ pub fn run() {
             remotes::get_origin,
             remotes::rename_remote_branch,
             remotes::add_origin_remote,
+            stash::create_stash,
+            stash::get_stashes,
             sync::get_divergence,
             sync::get_sync_status,
             sync::git_fetch,

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface RefLabel {
   name: string;
-  kind: "branch" | "remote" | "tag";
+  kind: "branch" | "remote" | "tag" | "stash";
   isHead: boolean;
 }
 
@@ -22,6 +22,8 @@ export interface GraphRow {
   parents: string[];
   /** HEAD or an ancestor of it: can be rewritten on the current branch. */
   onHead: boolean;
+  /** A stash: drawn as a hollow node hanging off the commit it was made on. */
+  isStash: boolean;
   refs: RefLabel[];
   col: number;
   color: number;

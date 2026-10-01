@@ -34,6 +34,8 @@ pub struct GraphRow {
     pub parents: Vec<String>,
     /// HEAD or an ancestor of it: the commits that can be rewritten on the current branch.
     pub on_head: bool,
+    /// A stash: drawn as a hollow node hanging off the commit it was made on.
+    pub is_stash: bool,
     pub refs: Vec<RefLabel>,
     pub col: usize,
     pub color: usize,
@@ -130,8 +132,26 @@ fn first_free(lanes: &mut Vec<Option<Lane>>) -> usize {
 }
 
 fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
-    let repo = Repository::discover(path).map_err(|e| e.message().to_string())?;
-    let (mut labels, tips) = collect_refs(&repo).map_err(|e| e.message().to_string())?;
+    let mut repo = Repository::discover(path).map_err(|e| e.message().to_string())?;
+    let (mut labels, mut tips) = collect_refs(&repo).map_err(|e| e.message().to_string())?;
+
+    // Stashes show up as nodes hanging off the commit they were made on. Their second and third
+    // parents (the saved index and the untracked files) are implementation details: not drawn.
+    let mut stash_ids: HashSet<Oid> = HashSet::new();
+    let mut stash_internal: HashSet<Oid> = HashSet::new();
+    for stash in crate::stash::list_stashes(&mut repo)? {
+        let Ok(oid) = Oid::from_str(&stash.id) else { continue };
+        if let Ok(commit) = repo.find_commit(oid) {
+            stash_internal.extend(commit.parent_ids().skip(1));
+        }
+        stash_ids.insert(oid);
+        tips.push(oid);
+        labels.entry(oid).or_default().push(RefLabel {
+            name: format!("stash@{{{}}}", stash.index),
+            kind: "stash",
+            is_head: false,
+        });
+    }
 
     let mut walk = repo.revwalk().map_err(|e| e.message().to_string())?;
     walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
@@ -160,11 +180,20 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
 
     for oid in walk {
         let oid = oid.map_err(|e| e.message().to_string())?;
+        if stash_internal.contains(&oid) {
+            continue;
+        }
         if rows.len() >= limit {
             has_more = true;
             break;
         }
         let commit = repo.find_commit(oid).map_err(|e| e.message().to_string())?;
+        // A stash only continues along the commit it was made on.
+        let parent_ids: Vec<Oid> = if stash_ids.contains(&oid) {
+            commit.parent_ids().take(1).collect()
+        } else {
+            commit.parent_ids().collect()
+        };
 
         let matches: Vec<usize> = lanes
             .iter()
@@ -196,7 +225,7 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
         }
 
         let mut bottom = Vec::new();
-        for (n, pid) in commit.parent_ids().enumerate() {
+        for (n, pid) in parent_ids.iter().copied().enumerate() {
             let existing = lanes.iter().position(|l| l.is_some_and(|l| l.oid == pid));
             match (existing, n) {
                 // Parent already has a lane (another branch reaches it): join that lane.
@@ -223,7 +252,7 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
 
         let on_head = head_ancestry.contains(&oid);
         if on_head {
-            head_ancestry.extend(commit.parent_ids());
+            head_ancestry.extend(parent_ids.iter().copied());
         }
 
         let author = commit.author();
@@ -234,8 +263,9 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
             author: author.name().unwrap_or("").to_string(),
             email: author.email().unwrap_or("").to_string(),
             time: commit.time().seconds(),
-            parents: commit.parent_ids().map(|p| p.to_string()).collect(),
+            parents: parent_ids.iter().map(|p| p.to_string()).collect(),
             on_head,
+            is_stash: stash_ids.contains(&oid),
             refs: labels.remove(&oid).unwrap_or_default(),
             col,
             color,
@@ -333,6 +363,36 @@ mod tests {
         let on_head = |id: Oid| g.rows.iter().find(|r| r.id == id.to_string()).unwrap().on_head;
         assert!(on_head(b) && on_head(a));
         assert!(!on_head(s));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stashes_are_nodes_off_their_base_commit() {
+        let dir = std::env::temp_dir().join(format!("gc-stashgraph-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut repo = Repository::init(&dir).unwrap();
+        let mut cfg = repo.config().unwrap();
+        cfg.set_str("user.name", "S").unwrap();
+        cfg.set_str("user.email", "s@example.com").unwrap();
+
+        let a = commit(&repo, "a", &[], Some("refs/heads/main"));
+        let b = commit(&repo, "b", &[a], Some("refs/heads/main"));
+        repo.set_head("refs/heads/main").unwrap();
+        std::fs::write(dir.join("u.txt"), "untracked").unwrap();
+        let stash = crate::stash::save_stash(&mut repo, Some("wip")).unwrap();
+
+        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        // Two commits plus one stash: the saved-index and untracked-files commits stay hidden.
+        assert_eq!(g.rows.len(), 3, "{:?}", g.rows.iter().map(|r| &r.summary).collect::<Vec<_>>());
+        let row = g.rows.iter().find(|r| r.id == stash.to_string()).unwrap();
+        assert!(row.is_stash && !row.on_head);
+        assert_eq!(row.parents, [b.to_string()]);
+        assert_eq!((row.refs.len(), row.refs[0].name.as_str(), row.refs[0].kind), (1, "stash@{0}", "stash"));
+        assert!(g.rows.iter().filter(|r| r.is_stash).count() == 1);
+        // The stash sits above the commit it hangs off.
+        let pos = |id: Oid| g.rows.iter().position(|r| r.id == id.to_string()).unwrap();
+        assert!(pos(stash) < pos(b) && pos(b) < pos(a));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

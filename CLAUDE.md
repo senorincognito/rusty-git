@@ -43,6 +43,7 @@ say plainly that UI behaviour is untested in the running app.
 | `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
 | `remotes.rs` | `origin` info, add origin, delete and rename remote branches |
 | `sync.rs` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
+| `stash.rs` | `get_stashes`, `create_stash` (stashes everything incl. untracked); helpers `stash_index_of`, `untracked_tree` |
 | `terminal.rs` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
 | `watch.rs` | the `.git` watcher |
 
@@ -124,6 +125,11 @@ app rename so users keep their data. Don't change it casually.
 - **Working-tree diffs** (click a file in Changes): *unstaged* = index vs file on disk (untracked files show as
   all additions), *staged* = HEAD vs index (on an unborn branch everything staged is an addition). Staging
   buttons on a row stop propagation so they don't also open the diff. Committing closes an open working diff.
+- **Stash** moves all uncommitted changes, **including untracked files** (not ignored ones), into a stash with an
+  optional message (`Stash…` button beside Commit, `StashDialog`). Stashes are visible in the graph (hollow node
+  off the base commit, `stash@{n}` chip, row `isStash`) and in a left-panel `Stashes` section; clicking either
+  opens the stash's `CommitDetail`. **Apply/pop/drop are intentionally not built yet** (the user asked to hold
+  off); the dialog tells users to use `git stash pop` in the terminal.
 - Commit detail diffs are against the **first parent**; renames detected; 2000-file and 20 000-line caps;
   binary/over-5 MB files are not previewed. The diff view has a "Full file" switch (default on).
 
@@ -141,6 +147,12 @@ app rename so users keep their data. Don't change it casually.
 - Use `disable_pathspec_match(true)` when a diff is limited by a literal file path.
 - `diff_index_to_workdir` only emits lines for untracked files with `include_untracked(true)` **and**
   `show_untracked_content(true)`; `diff_tree_to_index` takes `None` for the tree on an unborn branch.
+
+- Stashes: `stash_foreach`/`stash_save2` need `&mut Repository`, so code holding only `&Repository` uses
+  `stash_index_of` (opens a second handle). A stash commit's parents are [base, saved index, untracked
+  files]; the graph draws only the first and hides the other two rows, and `get_commit_detail`/`get_file_diff`
+  read the untracked files from the third parent's tree. libgit2 creates that third commit even when there
+  are no untracked files (empty tree), so don't treat its presence as meaningful.
 
 **git CLI**
 - A rejected `--force-with-lease` push with `--atomic` prints "atomic push failed"; only fall back to a
@@ -237,7 +249,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 
 ## Not implemented yet
 
-Tags and stashes in the sidebar; hunk/line staging from the diff view; checkout of remote branches; merge/rebase as standalone actions; discard
+Tags in the sidebar; applying, popping and dropping stashes; hunk/line staging from the diff view; checkout of remote branches; merge/rebase as standalone actions; discard
 changes and stash; conflict resolution UI (pulls with conflicts are aborted); multiple remotes (only
 `origin`); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview

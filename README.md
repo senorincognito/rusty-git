@@ -61,6 +61,15 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   changed in the working directory, with a **View changes** button that closes the commit view
   and returns to the staging panel (your draft commit message is kept). The × does the same.
 
+### Stashes
+- **Stash…** next to the Commit button (disabled when nothing has changed) takes an optional message
+  and moves every uncommitted change (staged, unstaged and untracked files; ignored files stay) into a
+  new stash, leaving the working directory clean.
+- Stashes show up in the commit graph as hollow nodes hanging off the commit they were made on, labelled
+  `stash@{n}`, and in a **Stashes** section in the left panel (newest first). Click one in either place
+  to see its message, base commit and changed files, untracked files included, and open any file's diff.
+- Applying, popping and dropping stashes is not available yet; use `git stash pop` in the terminal.
+
 ### Commit graph context menu
 - Right-click a commit: **Rename commit** opens an editor in the right panel with the full
   message and **Update** / **Cancel** buttons (Esc cancels, Ctrl+Enter updates). Only
@@ -128,10 +137,11 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 ## Not yet implemented
 
 - Diff view and commit detail panel
-- Tags and stashes in the sidebar, remote branch checkout
+- Tags in the sidebar, remote branch checkout
+- Applying, popping and dropping stashes
 - Merge / rebase, rename branch, push or pull from the context menu
 - Multiple remotes (only `origin` is handled)
-- Amend, discard changes, stash
+- Discard changes
 - Renames are shown as a delete plus an add
 
 ## Development

@@ -92,10 +92,17 @@ export default function CommitDetail({
             <p className="cd-line">
               {detail.author} · {dateFmt.format(new Date(detail.time * 1000))}
             </p>
+            {detail.stash && (
+              <p className="cd-line">
+                <strong>{detail.stash}</strong>: every uncommitted change that was saved here, including untracked files
+              </p>
+            )}
             <p className="cd-line">
-              {detail.parents.length === 0
-                ? "Root commit"
-                : `Parent${detail.parents.length === 1 ? "" : "s"}: ${detail.parents.join(", ")}`}
+              {detail.stash
+                ? `Made on ${detail.parents[0] ?? "an unknown commit"}`
+                : detail.parents.length === 0
+                  ? "Root commit"
+                  : `Parent${detail.parents.length === 1 ? "" : "s"}: ${detail.parents.join(", ")}`}
               {detail.isMerge && " · changes shown against the first parent"}
             </p>
           </div>

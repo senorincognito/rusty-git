@@ -21,6 +21,8 @@ export interface CommitDetail {
   parents: string[];
   /** Changes are relative to the first parent. */
   isMerge: boolean;
+  /** "stash@{n}" when this commit is a stash. */
+  stash: string | null;
   files: CommitFile[];
   totalFiles: number;
   /** The file list was cut off (very large commit). */
