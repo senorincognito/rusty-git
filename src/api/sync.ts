@@ -23,3 +23,27 @@ export interface AutoFetchOutcome {
 
 /** Quiet background fetch; never rejects for git failures, reports them in `status`. */
 export const autoFetch = (path: string) => invoke<AutoFetchOutcome>("git_auto_fetch", { path });
+
+export interface BriefCommit {
+  shortId: string;
+  summary: string;
+}
+
+/** The two sides of a branch that can't fast-forward. Lists are capped; totals count everything. */
+export interface Divergence {
+  branch: string;
+  upstream: string;
+  ahead: BriefCommit[];
+  behind: BriefCommit[];
+  aheadTotal: number;
+  behindTotal: number;
+}
+
+export const getDivergence = (path: string) => invoke<Divergence>("get_divergence", { path });
+
+/**
+ * Pulls by merging or rebasing. On conflicts the operation is cancelled and the repository is
+ * left as it was; the rejection says which files conflicted.
+ */
+export const gitPullWith = (path: string, mode: "merge" | "rebase") =>
+  invoke<string>("git_pull_with", { path, mode });

@@ -1302,3 +1302,89 @@ body.resizing {
 .branch-input:disabled {
   opacity: 0.6;
 }
+
+/* Modal dialog */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modal {
+  max-width: 92vw;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.modal p {
+  margin: 0;
+}
+
+.modal-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.div-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.div-cols h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.div-cols ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.div-cols li {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+  white-space: nowrap;
+}
+
+.div-cols li code {
+  flex: none;
+  color: var(--accent);
+}
+
+.div-cols li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

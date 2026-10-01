@@ -85,13 +85,19 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 
 ### Fetch, pull and push
 - Title-bar buttons run the system `git`, so your credential helper and SSH setup apply.
-- Fetch updates all remotes (with prune). Pull is fast-forward only, so it never creates a
-  surprise merge. Push publishes a new branch to `origin` and sets its upstream.
+- Fetch updates all remotes (with prune). Pull fast-forwards, so it never creates a surprise
+  merge. When the branches have diverged, a dialog lists the commits on each side and offers
+  **Merge** (the default: keeps every commit, adds a merge commit) or **Rebase** (replays your
+  commits on top of the upstream, giving them new ids). Uncommitted changes are set aside and
+  restored. If there are conflicts, the pull is cancelled with the file names and the repository is
+  left exactly as it was (resolve in the terminal for now). Push publishes a new branch to `origin` and sets its upstream.
 - **Auto-fetch** (on by default, every 3 minutes): fetches in the background while the window
   is focused, and right away when you come back to a stale repo. It never overlaps another
   git operation, stays silent (a small spinner shows while it runs), backs off when the
   remote is unreachable, and pauses instead of retrying when credentials are needed. Switch it
   off or pick 1 / 3 / 5 / 10 minutes from the ▾ next to Fetch (or right-click Fetch).
+- **Pull options**: click the small ▾ beside Pull (or right-click it) to pull with an explicit
+  strategy, **Pull (merge)** or **Pull (rebase)**, without the diverged-branches dialog.
 - **Force push**: right-click the Push button, or click the small ▾ beside it. It asks for
   confirmation first (and says how many remote commits will be discarded), then runs
   `git push --force-with-lease`, which is refused if the remote moved since your last fetch.

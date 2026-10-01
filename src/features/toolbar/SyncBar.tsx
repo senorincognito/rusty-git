@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { confirmDialog } from "@/api/dialog";
-import { getSyncStatus, gitFetch, gitForcePush, gitPull, gitPush, type SyncStatus } from "@/api/sync";
+import {
+  getDivergence,
+  getSyncStatus,
+  gitFetch,
+  gitForcePush,
+  gitPull,
+  gitPullWith,
+  gitPush,
+  type Divergence,
+  type SyncStatus,
+} from "@/api/sync";
 import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
 import { useAutoFetch } from "@/hooks/useAutoFetch";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { usePersistentState } from "@/hooks/usePersistentState";
+import PullDialog from "./PullDialog";
 
 type Op = "fetch" | "pull" | "push" | "force";
-type MenuKind = "fetch" | "push";
+type MenuKind = "fetch" | "pull" | "push";
 type Notice = { kind: "ok" | "error"; text: string };
 
 const OPS: Record<Op, { label: string; run: (path: string) => Promise<string> }> = {
@@ -16,6 +27,9 @@ const OPS: Record<Op, { label: string; run: (path: string) => Promise<string> }>
   push: { label: "Push", run: gitPush },
   force: { label: "Force push", run: gitForcePush },
 };
+
+// What git says when a pull can't fast-forward.
+const isNotFastForward = (msg: string) => /not possible to fast-forward|diverging branches/i.test(msg);
 
 const AUTO_FETCH_CHOICES = [60, 180, 300, 600]; // seconds
 const intervalLabel = (secs: number) => `${secs / 60} minute${secs === 60 ? "" : "s"}`;
@@ -38,6 +52,8 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
   const [notice, setNotice] = useState<Notice | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; kind: MenuKind } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  // Set while the user has to choose how to combine diverged branches.
+  const [divergence, setDivergence] = useState<Divergence | null>(null);
   const start = useLatestRequest();
 
   // Auto-fetch: on by default, every 3 minutes. Global settings, remembered between sessions.
@@ -90,6 +106,54 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
     }
   };
 
+  const openDivergence = async () => {
+    try {
+      setDivergence(await getDivergence(path));
+    } catch (e) {
+      setNotice({ kind: "error", text: String(e) });
+    }
+  };
+
+  // Pull fast-forwards. When the branches have diverged (known beforehand, or discovered by the
+  // pull's own fetch) the user chooses between merge and rebase instead of seeing an error.
+  const pull = async () => {
+    if (status && status.ahead > 0 && status.behind > 0) return openDivergence();
+    setBusy("pull");
+    setNotice(null);
+    try {
+      const out = await gitPull(path);
+      setNotice({ kind: "ok", text: out || "Pull complete" });
+      auto.resume();
+    } catch (e) {
+      const text = String(e);
+      if (isNotFastForward(text)) {
+        await refresh();
+        await openDivergence();
+      } else {
+        setNotice({ kind: "error", text });
+      }
+    } finally {
+      setBusy(null);
+      refresh();
+    }
+  };
+
+  const pullWith = async (mode: "merge" | "rebase") => {
+    setDivergence(null);
+    setBusy("pull");
+    setNotice(null);
+    try {
+      const out = await gitPullWith(path, mode);
+      setNotice({ kind: "ok", text: out || "Pull complete" });
+      auto.resume();
+    } catch (e) {
+      setNotice({ kind: "error", text: String(e) });
+    } finally {
+      setBusy(null);
+      refresh();
+    }
+  };
+
   const forcePush = async () => {
     if (!status?.upstream) return;
     const behind = status.behind;
@@ -114,8 +178,8 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
   const locked = busy !== null || auto.state === "fetching";
   // A force push in progress is shown on the Push button it came from.
   const shown = (op: Op) => busy === op || (op === "push" && busy === "force");
-  const btn = (op: Op, disabled: boolean, title: string, badge?: string) => (
-    <button className="syncbtn" disabled={locked || disabled} title={title} onClick={() => run(op)}>
+  const btn = (op: Op, disabled: boolean, title: string, badge?: string, action: () => void = () => run(op)) => (
+    <button className="syncbtn" disabled={locked || disabled} title={title} onClick={action}>
       {shown(op) ? `${OPS[op].label}…` : OPS[op].label}
       {badge && !shown(op) && <span className="badge-count">{badge}</span>}
     </button>
@@ -166,6 +230,33 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
     })),
   ];
 
+  // Pull with an explicit strategy, skipping the "diverged" dialog.
+  const pullDisabledReason = noRemote
+    ? "No remotes configured"
+    : noBranch
+      ? "Check out a branch first"
+      : !status?.upstream
+        ? "No upstream branch to pull from"
+        : null;
+  const pullMenuItems: MenuItem[] = [
+    {
+      label: "Pull (merge)",
+      disabled: locked || pullDisabledReason !== null,
+      title:
+        pullDisabledReason ??
+        `Fetch and merge ${status?.upstream} into this branch. A merge commit is added if both have new commits.`,
+      onClick: () => pullWith("merge"),
+    },
+    {
+      label: "Pull (rebase)",
+      disabled: locked || pullDisabledReason !== null,
+      title:
+        pullDisabledReason ??
+        `Fetch and replay your commits on top of ${status?.upstream}. Your commits get new ids.`,
+      onClick: () => pullWith("rebase"),
+    },
+  ];
+
   const pushMenuItems: MenuItem[] = [
     {
       label: "Force push",
@@ -202,11 +293,20 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
           </span>
         )}
         {withMenu("fetch", "Auto-fetch settings", btn("fetch", noRemote, fetchTitle))}
-        {btn(
+        {withMenu(
           "pull",
-          noRemote || noBranch || !status?.upstream,
-          status?.upstream ? `Pull (fast-forward) from ${status.upstream}` : "No upstream branch",
-          status?.behind ? `↓${status.behind}` : undefined,
+          "More pull options",
+          btn(
+            "pull",
+            noRemote || noBranch || !status?.upstream,
+            !status?.upstream
+              ? "No upstream branch"
+              : status.ahead > 0 && status.behind > 0
+                ? `Diverged from ${status.upstream} (↑${status.ahead} ↓${status.behind}): choose merge or rebase`
+                : `Pull (fast-forward) from ${status.upstream}`,
+            status?.behind ? `↓${status.behind}` : undefined,
+            pull,
+          ),
         )}
         {withMenu(
           "push",
@@ -224,7 +324,15 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
           x={menu.x}
           y={menu.y}
           onClose={closeMenu}
-          items={menu.kind === "fetch" ? fetchMenuItems : pushMenuItems}
+          items={menu.kind === "fetch" ? fetchMenuItems : menu.kind === "pull" ? pullMenuItems : pushMenuItems}
+        />
+      )}
+      {divergence && (
+        <PullDialog
+          divergence={divergence}
+          onMerge={() => pullWith("merge")}
+          onRebase={() => pullWith("rebase")}
+          onCancel={() => setDivergence(null)}
         />
       )}
       {notice && (

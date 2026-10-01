@@ -2,7 +2,7 @@ use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use git2::{BranchType, Repository};
+use git2::{BranchType, Repository, RepositoryState, Sort};
 use serde::Serialize;
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -189,6 +189,113 @@ fn push(path: &str) -> Result<String, String> {
     run_git(path, &["push", "--set-upstream", remote, "HEAD"])
 }
 
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BriefCommit {
+    pub short_id: String,
+    pub summary: String,
+}
+
+/// The two sides of a diverged branch: what only you have, and what only the upstream has.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Divergence {
+    pub branch: String,
+    pub upstream: String,
+    /// Newest first, at most LIST_LIMIT entries; the totals count everything.
+    pub ahead: Vec<BriefCommit>,
+    pub behind: Vec<BriefCommit>,
+    pub ahead_total: usize,
+    pub behind_total: usize,
+}
+
+const LIST_LIMIT: usize = 30;
+
+/// Commits reachable from `include` but not from `exclude`, newest first.
+fn side_commits(repo: &Repository, include: git2::Oid, exclude: git2::Oid) -> Result<Vec<BriefCommit>, String> {
+    let mut walk = repo.revwalk().map_err(err)?;
+    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(err)?;
+    walk.push(include).map_err(err)?;
+    walk.hide(exclude).map_err(err)?;
+    let mut out = Vec::new();
+    for oid in walk.take(LIST_LIMIT) {
+        let oid = oid.map_err(err)?;
+        let commit = repo.find_commit(oid).map_err(err)?;
+        out.push(BriefCommit {
+            short_id: oid.to_string()[..7].to_string(),
+            summary: commit.summary().ok().flatten().unwrap_or("").to_string(),
+        });
+    }
+    Ok(out)
+}
+
+fn divergence(path: &str) -> Result<Divergence, String> {
+    let repo = open(path)?;
+    let s = sync_status(&repo)?;
+    let (Some(branch), Some(upstream)) = (s.branch, s.upstream) else {
+        return Err("The current branch has no upstream to compare with".into());
+    };
+    let local = repo.head().and_then(|h| h.peel_to_commit()).map_err(err)?.id();
+    let remote = repo
+        .find_branch(&branch, BranchType::Local)
+        .and_then(|b| b.upstream())
+        .map_err(err)?
+        .get()
+        .target()
+        .ok_or("The upstream branch has no commits")?;
+    let (ahead_total, behind_total) = repo.graph_ahead_behind(local, remote).map_err(err)?;
+    Ok(Divergence {
+        ahead: side_commits(&repo, local, remote)?,
+        behind: side_commits(&repo, remote, local)?,
+        ahead_total,
+        behind_total,
+        branch,
+        upstream,
+    })
+}
+
+/// Pulls when fast-forwarding is not possible: "merge" adds a merge commit, "rebase" replays the
+/// local commits on top of the upstream. Uncommitted changes are set aside and restored
+/// (--autostash). If the result has conflicts there is no way to resolve them in the app yet,
+/// so the operation is cancelled and the repository is left exactly as it was.
+fn pull_with(path: &str, mode: &str) -> Result<String, String> {
+    let s = sync_status(&open(path)?)?;
+    if s.branch.is_none() {
+        return Err("Check out a branch before pulling".into());
+    }
+    if s.upstream.is_none() {
+        return Err("The current branch has no upstream to pull from. Push it first.".into());
+    }
+    let (args, retry_hint): (&[&str], &str) = match mode {
+        "merge" => (&["pull", "--no-rebase", "--no-edit", "--autostash"], "git pull --no-rebase"),
+        "rebase" => (&["pull", "--rebase", "--autostash"], "git pull --rebase"),
+        other => return Err(format!("Unknown pull mode \"{other}\"")),
+    };
+    run_git(path, args).map_err(|original| cancel_unfinished(path, retry_hint, original))
+}
+
+/// After a failed pull: if git stopped halfway (merge or rebase with conflicts), cancel it and say
+/// which files conflicted. Otherwise return git's own message unchanged.
+fn cancel_unfinished(path: &str, retry_hint: &str, original: String) -> String {
+    let Ok(repo) = open(path) else { return original };
+    let (abort, what): (&[&str], &str) = match repo.state() {
+        RepositoryState::Merge => (&["merge", "--abort"], "merge"),
+        RepositoryState::Rebase | RepositoryState::RebaseInteractive | RepositoryState::RebaseMerge => {
+            (&["rebase", "--abort"], "rebase")
+        }
+        _ => return original,
+    };
+    let files = run_git(path, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
+    let files: Vec<&str> = files.lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let which = if files.is_empty() { String::new() } else { format!(" in: {}", files.join(", ")) };
+    match run_git(path, abort) {
+        Ok(_) => format!(
+            "The {what} has conflicts{which}.\n\nIt was cancelled and nothing was changed. Resolve it in the terminal with \"{retry_hint}\"."
+        ),
+        Err(e) => format!("{original}\n\nThe {what} could not be cancelled automatically: {e}"),
+    }
+}
+
 /// Result of a background fetch. It never fails as a command: the frontend decides what to do
 /// from `status`: "ok", "none" (no remotes), "auth" (credentials needed), "offline" or "error".
 #[derive(Serialize, Debug, PartialEq)]
@@ -296,6 +403,18 @@ pub async fn git_pull(path: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn git_push(path: String) -> Result<String, String> {
     blocking(move || push(&path)).await
+}
+
+/// What a pull would be combining when the branches have diverged.
+#[tauri::command]
+pub async fn get_divergence(path: String) -> Result<Divergence, String> {
+    blocking(move || divergence(&path)).await
+}
+
+/// Pull by merging ("merge") or rebasing ("rebase"), for branches that can't fast-forward.
+#[tauri::command]
+pub async fn git_pull_with(path: String, mode: String) -> Result<String, String> {
+    blocking(move || pull_with(&path, &mode)).await
 }
 
 #[tauri::command]
@@ -503,6 +622,98 @@ mod tests {
         git(&b, &["remote", "set-url", "origin", base.join("missing.git").to_str().unwrap()]);
         assert_ne!(auto_fetch(bp).status, "ok");
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Two clones of one origin. Both have configured identities so merges and rebases can commit.
+    fn clone_pair(name: &str) -> (PathBuf, PathBuf, PathBuf) {
+        let base = tmp(name);
+        let origin = base.join("origin.git");
+        let (a, b) = (base.join("a"), base.join("b"));
+        fs::create_dir_all(&a).unwrap();
+        git(&base, &["init", "-q", "--bare", "-b", "main", origin.to_str().unwrap()]);
+        git(&a, &["init", "-q", "-b", "main"]);
+        git(&a, &["remote", "add", "origin", origin.to_str().unwrap()]);
+        git(&a, &["config", "user.name", "T"]);
+        git(&a, &["config", "user.email", "t@example.com"]);
+        commit_file(&a, "base.txt", "base");
+        push(a.to_str().unwrap()).unwrap();
+        git(&base, &["clone", "-q", origin.to_str().unwrap(), b.to_str().unwrap()]);
+        git(&b, &["config", "user.name", "T"]);
+        git(&b, &["config", "user.email", "t@example.com"]);
+        (base, a, b)
+    }
+
+    /// a and b each commit; b pushes; a fetches: a is now one ahead and one behind.
+    fn diverge(a: &Path, b: &Path, a_file: &str, b_file: &str) {
+        commit_file(a, a_file, "mine commit");
+        commit_file(b, b_file, "theirs commit");
+        push(b.to_str().unwrap()).unwrap();
+        fetch(a.to_str().unwrap()).unwrap();
+    }
+
+    fn parents_of_head(dir: &Path) -> usize {
+        git(dir, &["rev-list", "--parents", "-n", "1", "HEAD"]).split_whitespace().count() - 1
+    }
+
+    #[test]
+    fn diverged_pull_by_merge_or_rebase() {
+        // --- merge ---
+        let (base, a, b) = clone_pair("pull-merge");
+        let ap = a.to_str().unwrap();
+        diverge(&a, &b, "mine.txt", "theirs.txt");
+
+        let d = divergence(ap).unwrap();
+        assert_eq!((d.branch.as_str(), d.upstream.as_str()), ("main", "origin/main"));
+        assert_eq!((d.ahead_total, d.behind_total), (1, 1));
+        assert_eq!(d.ahead, [BriefCommit { short_id: d.ahead[0].short_id.clone(), summary: "mine commit".into() }]);
+        assert_eq!(d.behind[0].summary, "theirs commit");
+        // The plain fast-forward-only pull refuses, with a message the UI can recognise.
+        let e = pull(ap).unwrap_err().to_lowercase();
+        assert!(e.contains("fast-forward") || e.contains("diverging"), "{e}");
+
+        // An unrelated uncommitted edit is set aside and restored around the merge.
+        fs::write(a.join("base.txt"), "base, edited locally").unwrap();
+        pull_with(ap, "merge").unwrap();
+        assert_eq!(parents_of_head(&a), 2);
+        assert!(a.join("mine.txt").exists() && a.join("theirs.txt").exists());
+        assert_eq!(fs::read_to_string(a.join("base.txt")).unwrap(), "base, edited locally");
+        let s = sync_status(&open(ap).unwrap()).unwrap();
+        assert_eq!((s.ahead, s.behind), (2, 0));
+        assert!(pull_with(ap, "octopus").unwrap_err().contains("Unknown pull mode"));
+        let _ = fs::remove_dir_all(&base);
+
+        // --- rebase ---
+        let (base, a, b) = clone_pair("pull-rebase");
+        let ap = a.to_str().unwrap();
+        diverge(&a, &b, "mine.txt", "theirs.txt");
+        let before = git(&a, &["rev-parse", "HEAD"]);
+        pull_with(ap, "rebase").unwrap();
+        assert_eq!(parents_of_head(&a), 1); // linear history
+        assert_ne!(git(&a, &["rev-parse", "HEAD"]), before); // our commit was replayed
+        assert!(a.join("mine.txt").exists() && a.join("theirs.txt").exists());
+        let s = sync_status(&open(ap).unwrap()).unwrap();
+        assert_eq!((s.ahead, s.behind), (1, 0));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn conflicting_pulls_are_cancelled_and_leave_no_trace() {
+        let (base, a, b) = clone_pair("pull-conflict");
+        let ap = a.to_str().unwrap();
+        // Both sides rewrite the same file differently.
+        diverge(&a, &b, "base.txt", "base.txt");
+        let before = git(&a, &["rev-parse", "HEAD"]);
+
+        for mode in ["merge", "rebase"] {
+            let e = pull_with(ap, mode).unwrap_err();
+            assert!(e.contains("conflicts in: base.txt") && e.contains("cancelled"), "{mode}: {e}");
+            // Nothing half-done is left behind.
+            assert_eq!(open(ap).unwrap().state(), RepositoryState::Clean, "{mode}");
+            assert_eq!(git(&a, &["rev-parse", "HEAD"]), before, "{mode}");
+            assert_eq!(fs::read_to_string(a.join("base.txt")).unwrap(), "mine commit", "{mode}");
+            assert!(!a.join(".git").join("rebase-merge").exists() && !a.join(".git").join("MERGE_HEAD").exists());
+        }
         let _ = fs::remove_dir_all(&base);
     }
 }
