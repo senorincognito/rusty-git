@@ -5,6 +5,7 @@ import {
   deleteRemoteBranch,
   renameRemoteBranch,
   getOrigin,
+  setOriginUrl,
   type RemoteInfo,
 } from "@/api/remotes";
 import ContextMenu from "@/components/ContextMenu";
@@ -26,6 +27,10 @@ export default function Remotes({
   const [error, setError] = useState<string | null>(null);
   const start = useLatestRequest();
   const [menu, setMenu] = useState<{ x: number; y: number; branch: string } | null>(null);
+  // Right-click menu of the origin header, and whether its URL is being edited inline.
+  const [headMenu, setHeadMenu] = useState<{ x: number; y: number } | null>(null);
+  const closeHeadMenu = useCallback(() => setHeadMenu(null), []);
+  const [editingUrl, setEditingUrl] = useState(false);
   const closeMenu = useCallback(() => setMenu(null), []);
   // What a running server operation is doing, e.g. "Deleting origin/x…".
   const [busy, setBusy] = useState<string | null>(null);
@@ -47,6 +52,8 @@ export default function Remotes({
   useEffect(() => {
     setOrigin(undefined);
     setMenu(null);
+    setHeadMenu(null);
+    setEditingUrl(false);
   }, [path]);
 
   const deleteBranch = async (name: string) => {
@@ -108,6 +115,17 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
     }
   };
 
+  const changeUrl = async (url: string) => {
+    try {
+      await setOriginUrl(path, url);
+      setEditingUrl(false);
+      setError(null);
+      onChanged();
+    } catch (e) {
+      setError(String(e)); // the editor stays open so the URL can be corrected
+    }
+  };
+
   useEffect(() => {
     refresh();
   }, [refresh, refreshKey]);
@@ -119,9 +137,25 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
       {origin === null && <AddOrigin path={path} onAdded={onChanged} />}
       {origin && (
         <>
-          <div className="remote-head" title={origin.url}>
+          <div
+            className={"remote-head" + (headMenu ? " ctx" : "")}
+            title={origin.url}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setHeadMenu({ x: e.clientX, y: e.clientY });
+            }}
+          >
             <span className="rname">{origin.name}</span>
-            <span className="rurl">{origin.url}</span>
+            {editingUrl ? (
+              <BranchNameInput
+                initial={origin.url}
+                label="Remote URL"
+                onSubmit={changeUrl}
+                onCancel={() => setEditingUrl(false)}
+              />
+            ) : (
+              <span className="rurl">{origin.url}</span>
+            )}
           </div>
           {origin.branches.length === 0 && (
             <p className="muted side-msg">No remote branches yet. Fetch to load them.</p>
@@ -150,6 +184,22 @@ If somebody pushed to ${from} since your last fetch, the rename is refused.`,
             ))}
           </ul>
         </>
+      )}
+      {headMenu && origin && (
+        <ContextMenu
+          x={headMenu.x}
+          y={headMenu.y}
+          onClose={closeHeadMenu}
+          items={[
+            {
+              label: "Edit URL",
+              onClick: () => {
+                setError(null);
+                setEditingUrl(true);
+              },
+            },
+          ]}
+        />
       )}
       {menu && origin && (
         <ContextMenu

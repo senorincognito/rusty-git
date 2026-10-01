@@ -159,7 +159,7 @@ fn rename_remote_branch_checked(
     })
 }
 
-fn add_origin(repo: &Repository, url: &str) -> Result<(), String> {
+fn clean_url(url: &str) -> Result<&str, String> {
     let url = url.trim();
     if url.is_empty() {
         return Err("Enter the repository URL".into());
@@ -167,6 +167,22 @@ fn add_origin(repo: &Repository, url: &str) -> Result<(), String> {
     if url.chars().any(char::is_whitespace) {
         return Err("The URL must not contain spaces".into());
     }
+    Ok(url)
+}
+
+/// Points `origin` at a different URL. Remote-tracking branches are kept; the next fetch
+/// updates them from the new location.
+fn set_origin_url(repo: &Repository, url: &str) -> Result<(), String> {
+    let url = clean_url(url)?;
+    let remote = repo.find_remote(ORIGIN).map_err(|_| "No origin remote configured".to_string())?;
+    if remote.url().ok() == Some(url) {
+        return Err("The URL is unchanged".into());
+    }
+    repo.remote_set_url(ORIGIN, url).map_err(err)
+}
+
+fn add_origin(repo: &Repository, url: &str) -> Result<(), String> {
+    let url = clean_url(url)?;
     match repo.remote(ORIGIN, url) {
         Ok(_) => Ok(()),
         Err(e) if e.code() == git2::ErrorCode::Exists => {
@@ -215,6 +231,11 @@ pub async fn add_origin_remote(path: String, url: String) -> Result<(), String> 
     blocking(path, move |r| add_origin(r, &url)).await
 }
 
+#[tauri::command]
+pub async fn set_origin_remote_url(path: String, url: String) -> Result<(), String> {
+    blocking(path, move |r| set_origin_url(r, &url)).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,7 +277,24 @@ mod tests {
         let info = origin_info(&repo).unwrap().unwrap();
         assert_eq!(info.branches, ["alpha", "Beta", "main"]);
 
+        // Changing the URL keeps the remote-tracking branches.
+        assert!(set_origin_url(&repo, " ").is_err());
+        assert!(set_origin_url(&repo, "a b").is_err());
+        assert_eq!(set_origin_url(&repo, "https://example.com/a.git").unwrap_err(), "The URL is unchanged");
+        set_origin_url(&repo, " git@example.com:me/b.git ").unwrap();
+        let info = origin_info(&Repository::open(&dir).unwrap()).unwrap().unwrap();
+        assert_eq!(info.url, "git@example.com:me/b.git");
+        assert_eq!(info.branches, ["alpha", "Beta", "main"]);
+        let empty = tempdir_repo("gc-seturl-none");
+        assert!(set_origin_url(&empty, "https://example.com/x.git").unwrap_err().contains("No origin"));
+
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn tempdir_repo(name: &str) -> Repository {
+        let dir = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        Repository::init(&dir).unwrap()
     }
 
     fn git(dir: &std::path::Path, args: &[&str]) -> String {

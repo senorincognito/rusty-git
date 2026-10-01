@@ -102,6 +102,11 @@
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px 4px;
+
+  // The header a context menu is open on.
+  &.ctx {
+    background: $press-tint;
+  }
 }
 
 .rname {

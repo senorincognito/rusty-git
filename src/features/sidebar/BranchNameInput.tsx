@@ -9,10 +9,13 @@ export default function BranchNameInput({
   initial,
   onSubmit,
   onCancel,
+  label = "New branch name",
 }: {
   initial: string;
   onSubmit: (value: string) => Promise<void>;
   onCancel: () => void;
+  /** Accessible name; the editor is also used for the remote URL. */
+  label?: string;
 }) {
   const [value, setValue] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -48,7 +51,7 @@ export default function BranchNameInput({
       disabled={busy}
       spellCheck={false}
       autoComplete="off"
-      aria-label="New branch name"
+      aria-label={label}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === "Enter") {

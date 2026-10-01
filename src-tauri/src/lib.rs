@@ -52,6 +52,7 @@ pub fn run() {
             remotes::get_origin,
             remotes::rename_remote_branch,
             remotes::add_origin_remote,
+            remotes::set_origin_remote_url,
             stash::create_stash,
             stash::get_stashes,
             stash::pop_stash_cmd,

@@ -128,7 +128,8 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   checkout: refused if uncommitted changes would be overwritten).
 - **Branch** button: create a branch from the current commit and check it out; the name is
   validated and uncommitted changes carry over.
-- **Remotes**: shows `origin` with its URL and remote branches. When there is no origin yet,
+- **Remotes**: shows `origin` with its URL (right-click it and choose *Edit URL* to change where origin points; Enter saves,
+  Esc cancels, and the remote branches stay until the next fetch) and remote branches. When there is no origin yet,
   a form adds one.
 - **Context menus** on branches: *Rename branch* and *Delete branch* (both disabled for the
   checked-out branch), and *Rename remote branch* and *Delete remote branch* (both disabled for
@@ -265,7 +266,7 @@ Backend (`src-tauri/src/`), one module per concern, each with tests where it has
 | `graph.rs` | Commit walk, ref labels, lane layout |
 | `changes.rs` | Status, stage / unstage, create commit |
 | `branches.rs` | Local branches, create / checkout / delete |
-| `remotes.rs` | Origin info, add origin, delete remote branch |
+| `remotes.rs` | Origin info, add origin, change origin URL, delete remote branch |
 | `sync.rs` | Fetch / pull / push via system git, ahead/behind |
 | `terminal.rs` | Pseudo-terminal sessions |
 | `watch.rs` | Watches `.git` and emits `repo-changed` for live reload |

@@ -43,7 +43,7 @@ say plainly that UI behaviour is untested in the running app.
 | `commit_detail.rs` | all diff rendering: `get_commit_detail` (files of a commit, renames), `get_file_diff` (a commit's file), `get_working_diff` (staged/unstaged file); shared `diff_options` + `render_diff` |
 | `history.rs` | `get_rename_info`, `rename_commit_message` (rewrites the commit and its descendants); `is_pushed` |
 | `branches.rs` | list, create+checkout, checkout, delete, rename (local) |
-| `remotes.rs` | `origin` info, add origin, delete and rename remote branches |
+| `remotes.rs` | `origin` info, add origin, `set_origin_remote_url` (right-click the origin header; reuses `BranchNameInput`), delete and rename remote branches |
 | `sync.rs` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
 | `stash.rs` | `get_stashes`, `create_stash` (stashes everything incl. untracked); helpers `stash_index_of`, `untracked_tree` |
 | `terminal.rs` | PTY sessions (`portable-pty`) feeding the xterm.js panel |

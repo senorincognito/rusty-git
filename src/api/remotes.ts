@@ -13,6 +13,10 @@ export const getOrigin = (path: string) => invoke<RemoteInfo | null>("get_origin
 export const addOriginRemote = (path: string, url: string) =>
   invoke<void>("add_origin_remote", { path, url });
 
+/** Points origin at a different URL (remote-tracking branches are kept). */
+export const setOriginUrl = (path: string, url: string) =>
+  invoke<void>("set_origin_remote_url", { path, url });
+
 /** Commits that exist only on origin/<name> (not in HEAD or any local branch). */
 export const countUnmergedRemoteCommits = (path: string, name: string) =>
   invoke<number>("count_unmerged_remote_commits", { path, name });
