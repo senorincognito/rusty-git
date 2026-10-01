@@ -323,8 +323,12 @@ mod tests {
     use super::*;
     use git2::Signature;
 
+    // Every commit gets a later timestamp than the one before: with equal times (several commits in one second)
+    // the order of sibling commits in the graph is undefined and the layout assertions flap.
     fn commit(repo: &Repository, msg: &str, parents: &[Oid], update: Option<&str>) -> Oid {
-        let sig = Signature::now("t", "t@example.com").unwrap();
+        static CLOCK: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(1_700_000_000);
+        let at = CLOCK.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let sig = Signature::new("t", "t@example.com", &git2::Time::new(at, 0)).unwrap();
         let tree = repo.find_tree(repo.treebuilder(None).unwrap().write().unwrap()).unwrap();
         let ps: Vec<_> = parents.iter().map(|o| repo.find_commit(*o).unwrap()).collect();
         let refs: Vec<_> = ps.iter().collect();
@@ -343,8 +347,9 @@ mod tests {
         //  |/
         //  A1
         let a1 = commit(&repo, "a1", &[], Some("refs/heads/main"));
-        let a2 = commit(&repo, "a2", &[a1], Some("refs/heads/main"));
+        // b1 is older than a2, so a2 is listed first and the topic branch gets the second lane.
         let b1 = commit(&repo, "b1", &[a1], Some("refs/heads/topic"));
+        let a2 = commit(&repo, "a2", &[a1], Some("refs/heads/main"));
         let m = commit(&repo, "m", &[a2, b1], Some("refs/heads/main"));
         repo.set_head("refs/heads/main").unwrap();
 

@@ -253,6 +253,8 @@ struct RebaseGroup {
     squashed_messages: Vec<String>,
     reworded: bool,
     dropped: bool,
+    /// Position (oldest first, in the new order) of the newest commit of the group.
+    last_pos: usize,
 }
 
 impl RebaseGroup {
@@ -273,19 +275,33 @@ impl RebaseGroup {
 }
 
 /// Applies an interactive rebase made of `pick`, `reword`, `squash` and `drop` steps (commits without a step
-/// are picked). A squashed commit is melded into the commit before it in the list (the next older one,
-/// following a chain of squashes to the commit that starts it); the result keeps that commit's author and
-/// parents, takes the content of the newest commit of the group, and its message is the older message
-/// followed by the squashed ones. Every commit after the oldest change is rebuilt on top, then the branch
-/// moves; without a drop the files and the index stay as they are because the tip's content never changes.
+/// are picked) keeping the planned order; see [`apply_rebase_ordered`]. Used by the tests.
+#[cfg(test)]
+fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[RebaseStep]) -> Result<(), String> {
+    apply_rebase_ordered(repo, base_id, head_id, steps, &[])
+}
+
+/// Applies an interactive rebase. `order` lists the ids of all the plan's commits newest first in the order
+/// they should end up in (empty: unchanged); `steps` say what to do with each. A squashed commit is melded
+/// into the commit before it in the new order (following a chain of squashes to the commit that starts it);
+/// the result keeps that commit's author and parents, and its message is the older message followed by the
+/// squashed ones. Every commit after the oldest change is rebuilt on top, then the branch moves; as long as
+/// nothing is dropped or moved the files and the index stay as they are because the tip's content never changes.
 ///
-/// A `drop` changes content: from the first dropped commit on, the later commits are replayed in memory with
-/// `cherrypick_commit` onto the rebuilt history (3-way merges). If one of them depends on a dropped commit the
-/// whole rebase is abandoned with nothing changed; otherwise a hard reset moves the branch, index and files, so
-/// the working directory must be clean. Merge commits can't be replayed that way, so they are refused after a drop.
+/// A `drop` or a changed order changes content: from the first dropped or moved commit on, the commits are
+/// replayed in memory with `cherrypick_commit` onto the rebuilt history (3-way merges). If one of them depends
+/// on a commit that was dropped or moved behind it, the whole rebase is abandoned with nothing changed; otherwise
+/// a hard reset moves the branch, index and files, so the working directory must be clean. Merge commits can't
+/// be replayed that way, so they are refused from the first drop or move on.
 ///
 /// Refuses if HEAD is no longer `head_id`, so a plan shown earlier can't be applied to a branch that moved meanwhile.
-fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[RebaseStep]) -> Result<(), String> {
+fn apply_rebase_ordered(
+    repo: &Repository,
+    base_id: &str,
+    head_id: &str,
+    steps: &[RebaseStep],
+    order: &[String],
+) -> Result<(), String> {
     if repo.state() != RepositoryState::Clean {
         return Err("Finish the merge, rebase or other operation in progress first".into());
     }
@@ -293,6 +309,7 @@ fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[Rebase
     if plan.head_id != head_id {
         return Err("The branch has changed since the rebase was opened. Close it and start again.".into());
     }
+    let base = Oid::from_str(base_id).map_err(err)?;
 
     let mut chosen: HashMap<&str, &RebaseStep> = HashMap::new();
     for step in steps {
@@ -302,9 +319,34 @@ fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[Rebase
         chosen.insert(step.id.as_str(), step);
     }
 
-    // Oldest first, grouping every squashed commit with the commit it melds into.
+    // The commits oldest first, in the order they should end up in.
+    let original: Vec<&RebaseCommit> = plan.commits.iter().rev().collect();
+    let ordered: Vec<&RebaseCommit> = if order.is_empty() {
+        original.clone()
+    } else {
+        let mut listed = Vec::new();
+        for id in order.iter().rev() {
+            let c = plan
+                .commits
+                .iter()
+                .find(|c| &c.id == id)
+                .ok_or_else(|| format!("Commit {} is not part of this rebase", &id[..7.min(id.len())]))?;
+            listed.push(c);
+        }
+        let mut sorted: Vec<&str> = listed.iter().map(|c| c.id.as_str()).collect();
+        sorted.sort_unstable();
+        sorted.dedup();
+        if listed.len() != plan.commits.len() || sorted.len() != listed.len() {
+            return Err("The new order must list every commit of the rebase exactly once".into());
+        }
+        listed
+    };
+    // From this position on the commits differ from the original history, so their trees can't be reused.
+    let first_moved = original.iter().zip(&ordered).position(|(o, n)| o.id != n.id);
+
+    // Group every squashed commit with the commit it melds into.
     let mut groups: Vec<RebaseGroup> = Vec::new();
-    for c in plan.commits.iter().rev() {
+    for (pos, c) in ordered.iter().enumerate() {
         let oid = Oid::from_str(&c.id).map_err(err)?;
         let step = chosen.get(c.id.as_str());
         match step.map_or(RebaseAction::Pick, |s| s.action) {
@@ -323,6 +365,7 @@ fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[Rebase
                 }
                 target.squashed.push(oid);
                 target.squashed_messages.push(c.message.clone());
+                target.last_pos = pos;
             }
             RebaseAction::Drop => groups.push(RebaseGroup {
                 head: oid,
@@ -331,6 +374,7 @@ fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[Rebase
                 squashed_messages: Vec::new(),
                 reworded: false,
                 dropped: true,
+                last_pos: pos,
             }),
             action => {
                 let mut message = c.message.clone();
@@ -354,40 +398,45 @@ fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[Rebase
                     squashed_messages: Vec::new(),
                     reworded,
                     dropped: false,
+                    last_pos: pos,
                 });
             }
         }
     }
+    let moved = |g: &RebaseGroup| first_moved.is_some_and(|m| g.last_pos >= m);
     let first_changed = groups
         .iter()
-        .position(RebaseGroup::changed)
-        .ok_or("Nothing to change: reword, squash or drop at least one commit")?;
+        .position(|g| g.changed() || moved(g))
+        .ok_or("Nothing to change: reword, squash, drop or move at least one commit")?;
 
-    let old_head = Oid::from_str(&plan.head_id).map_err(err)?;
-    let has_drop = groups.iter().any(|g| g.dropped);
-    if has_drop && !crate::changes::status_of(repo)?.is_empty() {
-        return Err("The working directory has uncommitted changes. Commit or stash them first: dropping a commit \
-                    resets the files to the new history."
+    let will_replay = first_moved.is_some() || groups.iter().any(|g| g.dropped);
+    if will_replay && !crate::changes::status_of(repo)?.is_empty() {
+        return Err("The working directory has uncommitted changes. Commit or stash them first: dropping or moving \
+                    commits resets the files to the new history."
             .into());
     }
 
     let mut rebuilt: HashMap<Oid, Oid> = HashMap::new();
-    // Once a commit is dropped the later trees can no longer be reused: they are replayed instead.
+    // What the next commit is built on: the rebuilt commit before it (the base for the first one).
+    let mut tip = if first_changed == 0 { base } else { groups[first_changed - 1].head };
+    // Once a commit is dropped or moved the later trees can no longer be reused: they are replayed instead.
     let mut replaying = false;
     for group in &groups[first_changed..] {
-        let head = repo.find_commit(group.head).map_err(err)?;
-        let parents = head
-            .parent_ids()
-            .map(|p| repo.find_commit(*rebuilt.get(&p).unwrap_or(&p)).map_err(err))
-            .collect::<Result<Vec<_>, _>>()?;
-
         if group.dropped {
             replaying = true;
-            // Whatever was built on this commit is built on its (rebuilt) parent instead.
-            let below = parents.first().ok_or("The first commit of a branch can't be dropped")?.id();
-            rebuilt.insert(group.head, below);
+            rebuilt.insert(group.head, tip); // whatever was built on it is built on what is below it
             continue;
         }
+        replaying = replaying || moved(group);
+
+        let head = repo.find_commit(group.head).map_err(err)?;
+        let parents = if replaying {
+            vec![repo.find_commit(tip).map_err(err)?]
+        } else {
+            head.parent_ids()
+                .map(|p| repo.find_commit(*rebuilt.get(&p).unwrap_or(&p)).map_err(err))
+                .collect::<Result<Vec<_>, _>>()?
+        };
 
         let mut members = vec![group.head];
         members.extend(&group.squashed);
@@ -400,9 +449,14 @@ fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[Rebase
         };
 
         let parent_refs: Vec<&Commit> = parents.iter().collect();
-        let (text, committer) = if group.changed() {
+        let (text, committer) = if group.changed() || replaying {
             // Like --amend: the person rebasing becomes the committer (falling back to the old one).
-            (group.full_message(), repo.signature().unwrap_or_else(|_| head.committer().to_owned()))
+            let message = if group.changed() {
+                group.full_message()
+            } else {
+                String::from_utf8_lossy(head.message_raw_bytes()).into_owned()
+            };
+            (message, repo.signature().unwrap_or_else(|_| head.committer().to_owned()))
         } else {
             (String::from_utf8_lossy(head.message_raw_bytes()).into_owned(), head.committer().to_owned())
         };
@@ -410,17 +464,17 @@ fn apply_rebase(repo: &Repository, base_id: &str, head_id: &str, steps: &[Rebase
         for m in members {
             rebuilt.insert(m, new);
         }
+        tip = new;
     }
 
-    let new_head = rebuilt[&old_head];
-    if has_drop {
-        let tip = repo.find_commit(new_head).map_err(err)?;
+    if will_replay {
+        let tip = repo.find_commit(tip).map_err(err)?;
         return repo.reset(tip.as_object(), ResetType::Hard, None).map_err(err);
     }
     let reworded = groups.iter().filter(|g| g.reworded).count();
     let squashed: usize = groups.iter().map(|g| g.squashed.len()).sum();
     let note = format!("interactive rebase: {reworded} reworded, {squashed} squashed");
-    move_head_to(repo, new_head, &note)
+    move_head_to(repo, tip, &note)
 }
 
 /// The tree of a group's commits (`members`, oldest first) replayed onto `parents[0]`, the rebuilt history
@@ -432,7 +486,7 @@ fn replay_group<'r>(repo: &'r Repository, members: &[Oid], parents: &[Commit<'r>
         let commit = repo.find_commit(*oid).map_err(err)?;
         if commit.parent_count() != 1 {
             return Err(format!(
-                "{} is a merge commit and can't be replayed after a dropped commit",
+                "{} is a merge commit and can't be replayed after a dropped or moved commit",
                 &oid.to_string()[..7]
             ));
         }
@@ -446,7 +500,7 @@ fn replay_group<'r>(repo: &'r Repository, members: &[Oid], parents: &[Commit<'r>
                 .map(|e| String::from_utf8_lossy(&e.path).into_owned())
                 .collect();
             return Err(format!(
-                "The commit {} depends on a commit that is dropped ({}). Nothing was changed.",
+                "The commit {} depends on a commit that was dropped or moved behind it ({}). Nothing was changed.",
                 &oid.to_string()[..7],
                 files.join(", ")
             ));
@@ -583,15 +637,16 @@ pub async fn get_rebase_plan(path: String, id: String) -> Result<RebasePlan, Str
     blocking(path, move |r| rebase_plan(r, &id)).await
 }
 
-/// Applies an interactive rebase of pick / reword / squash steps (see [`apply_rebase`]).
+/// Applies an interactive rebase of pick / reword / squash / drop steps in a given order (see [`apply_rebase_ordered`]).
 #[tauri::command]
 pub async fn apply_rebase_cmd(
     path: String,
     base_id: String,
     head_id: String,
     steps: Vec<RebaseStep>,
+    order: Vec<String>,
 ) -> Result<(), String> {
-    blocking(path, move |r| apply_rebase(r, &base_id, &head_id, &steps)).await
+    blocking(path, move |r| apply_rebase_ordered(r, &base_id, &head_id, &steps, &order)).await
 }
 
 /// What the rename dialog needs: current message and the consequences of renaming.
@@ -1019,6 +1074,61 @@ mod tests {
         assert!(!dir.join("y.txt").exists());
         assert!(dir.join("z.txt").exists());
         let _ = z;
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn interactive_rebase_reorders_commits() {
+        let (dir, repo) = new_repo("rebase-move");
+        let base = commit_file(&repo, &dir, "base.txt", "0", "base");
+        let a = commit_file(&repo, &dir, "a.txt", "a", "add a");
+        let b = commit_file(&repo, &dir, "b.txt", "b", "add b");
+        let c = commit_file(&repo, &dir, "c.txt", "c", "add c");
+        let d = commit_file(&repo, &dir, "a.txt", "a2", "change a");
+        repo.config().unwrap().set_str("user.name", "Editor").unwrap();
+        repo.config().unwrap().set_str("user.email", "e@example.com").unwrap();
+        let bs = base.to_string();
+        let head = rebase_plan(&repo, &bs).unwrap().head_id;
+        let ids = |list: &[Oid]| list.iter().map(|o| o.to_string()).collect::<Vec<_>>();
+
+        // Malformed orders and a pure no-op are refused.
+        let e = apply_rebase_ordered(&repo, &bs, &head, &[], &ids(&[d, c, b])).unwrap_err();
+        assert!(e.contains("every commit"), "{e}");
+        let e = apply_rebase_ordered(&repo, &bs, &head, &[], &ids(&[d, c, b, a])).unwrap_err();
+        assert!(e.contains("Nothing to change"), "{e}");
+
+        // "change a" can't move below "add a": it would lose what it changes. Nothing happens.
+        let e = apply_rebase_ordered(&repo, &bs, &head, &[], &ids(&[c, b, a, d])).unwrap_err();
+        assert!(e.contains("depends on") && e.contains("a.txt"), "{e}");
+        assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().id(), d);
+
+        // Swap "add b" and "add c" (newest first: d, b, c, a): files stay, history follows the new order.
+        std::fs::write(dir.join("dirty.txt"), "x").unwrap();
+        let e = apply_rebase_ordered(&repo, &bs, &head, &[], &ids(&[d, b, c, a])).unwrap_err();
+        assert!(e.contains("uncommitted changes"), "{e}");
+        std::fs::remove_file(dir.join("dirty.txt")).unwrap();
+        apply_rebase_ordered(&repo, &bs, &head, &[], &ids(&[d, b, c, a])).unwrap();
+        assert_eq!(log(&repo), ["change a", "add b", "add c", "add a", "base"]);
+        let tip = repo.head().unwrap().peel_to_commit().unwrap();
+        assert_eq!(tip.author().name(), Ok("D"));
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "a2");
+        assert!(dir.join("b.txt").exists() && dir.join("c.txt").exists());
+        assert!(crate::changes::status_of(&repo).unwrap().is_empty());
+        let first = tip.parent(0).unwrap().parent(0).unwrap().parent(0).unwrap();
+        assert_eq!(first.id(), a, "commits before the first move are untouched");
+
+        // Move + squash use the new order: put "add c" below "add b" again and squash "add b" into it.
+        let plan = rebase_plan(&repo, &bs).unwrap();
+        let by = |msg: &str| plan.commits.iter().find(|c| c.message == msg).unwrap().id.clone();
+        let (b2, c2, d2) = (by("add b"), by("add c"), by("change a"));
+        let order = vec![d2.clone(), c2.clone(), b2.clone(), by("add a")];
+        let steps = [RebaseStep { id: c2.clone(), action: RebaseAction::Squash, message: None }];
+        apply_rebase_ordered(&repo, &bs, &plan.head_id, &steps, &order).unwrap();
+        // "add b" ends up before "add c"; "add c" melds into it.
+        assert_eq!(log(&repo), ["change a", "add b", "add a", "base"]);
+        assert_eq!(repo.head().unwrap().peel_to_commit().unwrap().parent(0).unwrap().message(), Ok("add b\n\nadd c\n"));
+        assert!(dir.join("c.txt").exists() && dir.join("b.txt").exists());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

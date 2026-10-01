@@ -24,15 +24,25 @@ const ACTIONS: { value: Action; label: string; title: string }[] = [
 export default function InteractiveRebase({
   path,
   base,
+  selectedId,
+  diffOpen,
+  onSelectCommit,
   onCancel,
   onApplied,
 }: {
   path: string;
   base: { id: string; shortId: string };
+  /** The commit whose changed files are shown in the right panel. */
+  selectedId: string | null;
+  /** A file diff is open on top of this screen: Escape belongs to it. */
+  diffOpen: boolean;
+  onSelectCommit: (commit: { id: string; shortId: string }) => void;
   onCancel: () => void;
   onApplied: () => void;
 }) {
   const [plan, setPlan] = useState<RebasePlan | null>(null);
+  // The commit ids in the order they are shown (newest first); "move up/down" changes it.
+  const [order, setOrder] = useState<string[]>([]);
   // New messages of the commits set to "reword", and the commits set to "squash" (every other commit is a "pick").
   const [reworded, setReworded] = useState<Record<string, string>>({});
   const [squashed, setSquashed] = useState<Record<string, true>>({});
@@ -48,6 +58,7 @@ export default function InteractiveRebase({
   useEffect(() => {
     let stale = false;
     setPlan(null);
+    setOrder([]);
     setReworded({});
     setSquashed({});
     setDropped({});
@@ -55,7 +66,11 @@ export default function InteractiveRebase({
     setMenu(null);
     setError(null);
     getRebasePlan(path, base.id)
-      .then((p) => !stale && setPlan(p))
+      .then((p) => {
+        if (stale) return;
+        setPlan(p);
+        setOrder(p.commits.map((c) => c.id));
+      })
       .catch((e) => !stale && setError(String(e)));
     return () => {
       stale = true;
@@ -65,7 +80,7 @@ export default function InteractiveRebase({
   // Escape cancels the rebase, unless it already means something else (a field, the popup, a menu).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing || busy) return;
+      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing || busy || diffOpen) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
       if (document.querySelector(".ctxmenu, .modal-backdrop")) return;
@@ -73,9 +88,15 @@ export default function InteractiveRebase({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel, busy]);
+  }, [onCancel, busy, diffOpen]);
 
-  const commits = plan?.commits ?? [];
+  // The commits in the shown order (newest first).
+  const planCommits = plan?.commits ?? [];
+  const byId = new Map(planCommits.map((c) => [c.id, c]));
+  const commits = order.flatMap((id) => byId.get(id) ?? []);
+  // Where a commit sits compared with the plan: from the first (oldest) difference on, the history is replayed.
+  const moved = commits.map((c, i) => c.id !== planCommits[i]?.id);
+  const reordered = moved.some(Boolean);
   const rewordCount = Object.keys(reworded).length;
   const squashCount = Object.keys(squashed).length;
   const dropCount = Object.keys(dropped).length;
@@ -87,7 +108,8 @@ export default function InteractiveRebase({
   };
   // The commits that change directly, and (the oldest of them) where the rebuilding starts.
   const touched = new Set<string>([...Object.keys(reworded), ...Object.keys(dropped)]);
-  let oldest = commits.reduce((at, c, i) => (c.id in reworded || c.id in dropped ? i : at), -1);
+  let oldest = commits.reduce((at, c, i) => (c.id in reworded || c.id in dropped || moved[i] ? i : at), -1);
+  commits.forEach((c, i) => moved[i] && touched.add(c.id));
   commits.forEach((c, i) => {
     if (!(c.id in squashed)) return;
     touched.add(c.id);
@@ -100,8 +122,7 @@ export default function InteractiveRebase({
   // Everything from the oldest change up to the tip gets a new id.
   const rewritten = oldest < 0 ? [] : commits.slice(0, oldest + 1);
   const pushedRewritten = rewritten.filter((c) => c.pushed).length;
-  const changeCount = rewordCount + squashCount + dropCount;
-  const canStart = !busy && plan !== null && changeCount > 0;
+  const changeCount = rewordCount + squashCount + dropCount + (reordered ? 1 : 0);
 
   // Why an action isn't available for the commit at `index` (null: it is). Shared by the select and the menu.
   const squashBlockedFor = (index: number) => {
@@ -119,6 +140,23 @@ export default function InteractiveRebase({
   // A commit that others are squashed into can't be dropped (the commit just above it is squashed).
   const dropBlockedFor = (index: number) =>
     index > 0 && commits[index - 1].id in squashed ? t.rebase.dropSquashed : null;
+
+  // Moving can leave an action that no longer fits (a squash that is now the oldest commit, ...).
+  const problem = (() => {
+    for (let i = 0; i < commits.length; i++) {
+      const reason = (commits[i].id in squashed && squashBlockedFor(i)) || (commits[i].id in dropped && dropBlockedFor(i));
+      if (reason) return t.rebase.invalid(commits[i].shortId, reason);
+    }
+    return null;
+  })();
+  const canStart = !busy && plan !== null && changeCount > 0 && problem === null;
+
+  const moveCommit = (index: number, delta: -1 | 1) =>
+    setOrder((o) => {
+      const next = [...o];
+      [next[index], next[index + delta]] = [next[index + delta], next[index]];
+      return next;
+    });
 
   const setAction = (c: RebaseCommit, action: Action) => {
     if (action === "reword") {
@@ -151,7 +189,7 @@ export default function InteractiveRebase({
         ...Object.keys(squashed).map((id) => ({ id, action: "squash" as const })),
         ...Object.keys(dropped).map((id) => ({ id, action: "drop" as const })),
       ];
-      await applyRebase(path, base.id, plan.headId, steps);
+      await applyRebase(path, base.id, plan.headId, steps, order);
       onApplied();
     } catch (e) {
       setError(String(e));
@@ -191,7 +229,23 @@ export default function InteractiveRebase({
             return (
               <li
                 key={c.id}
-                className={"rebaserow " + action + (menu?.index === index ? " ctx" : "")}
+                className={
+                  "rebaserow " + action + (c.id === selectedId ? " selected" : "") + (menu?.index === index ? " ctx" : "")
+                }
+                title={t.rebase.rowHint}
+                tabIndex={0}
+                // Clicking the row (not its select or buttons) shows the commit's files in the right panel.
+                onClick={(e) => {
+                  if (!(e.target as HTMLElement).closest("select, button")) {
+                    onSelectCommit({ id: c.id, shortId: c.shortId });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    onSelectCommit({ id: c.id, shortId: c.shortId });
+                  }
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   if (!busy) setMenu({ x: e.clientX, y: e.clientY, index });
@@ -232,6 +286,11 @@ export default function InteractiveRebase({
                   <span className="rebase-into">{t.rebase.squashInto(squashTarget(index)?.shortId ?? "")}</span>
                 )}
                 {action === "drop" && <span className="rebase-gone">{t.rebase.dropped}</span>}
+                {moved[index] && (
+                  <span className="rebase-tag moved" title={t.rebase.movedHint}>
+                    {t.rebase.moved}
+                  </span>
+                )}
                 {action === "reword" && (
                   <button className="ghost rebase-edit" onClick={() => setEditing(c)} disabled={busy}>
                     {t.rebase.editMessage}
@@ -260,12 +319,13 @@ export default function InteractiveRebase({
         <div className="rebase-info">
           {error && <p className="error">{error}</p>}
           {!error && changeCount === 0 && plan && <p className="muted">{t.rebase.chooseAction}</p>}
+          {problem && <p className="error">{problem}</p>}
           {changeCount > 0 && (
             <p className="muted">
-              {t.rebase.summary(rewordCount, squashCount, dropCount, rewritten.length - touched.size)}
+              {t.rebase.summary(rewordCount, squashCount, dropCount, reordered, rewritten.length - touched.size)}
             </p>
           )}
-          {dropCount > 0 && <p className="muted">{t.rebase.dropNote}</p>}
+          {(dropCount > 0 || reordered) && <p className="muted">{t.rebase.replayNote}</p>}
           {pushedRewritten > 0 && (
             <p className="warn">
               {t.rebase.pushedWarning(pushedRewritten)}
@@ -297,6 +357,19 @@ export default function InteractiveRebase({
               disabled: dropBlockedFor(menu.index) !== null,
               title: dropBlockedFor(menu.index) ?? t.rebase.dropHint,
               onClick: () => setAction(commits[menu.index], "drop"),
+            },
+            {
+              label: t.rebase.menuMoveUp,
+              separatorBefore: true,
+              disabled: menu.index === 0,
+              title: menu.index === 0 ? t.rebase.moveTopHint : t.rebase.moveUpHint,
+              onClick: () => moveCommit(menu.index, -1),
+            },
+            {
+              label: t.rebase.menuMoveDown,
+              disabled: menu.index === commits.length - 1,
+              title: menu.index === commits.length - 1 ? t.rebase.moveBottomHint : t.rebase.moveDownHint,
+              onClick: () => moveCommit(menu.index, 1),
             },
           ]}
         />

@@ -54,9 +54,13 @@ export interface RebaseStep {
  * after the oldest change is rebuilt and the branch moves. A "drop" removes the commit and its changes: the later
  * commits are replayed (new ids, new content), which needs a clean working directory and is abandoned, with nothing
  * changed, if one of them depends on a dropped commit.
+ *
+ * `order` lists the ids of all the plan's commits, newest first, in the order they should end up in (the plan's own
+ * order when nothing moved). A different order replays the commits the same way a drop does: it needs a clean
+ * working directory and is abandoned if a commit depends on one that now comes after it.
  */
-export const applyRebase = (path: string, baseId: string, headId: string, steps: RebaseStep[]) =>
-  invoke<void>("apply_rebase_cmd", { path, baseId, headId, steps });
+export const applyRebase = (path: string, baseId: string, headId: string, steps: RebaseStep[], order: string[]) =>
+  invoke<void>("apply_rebase_cmd", { path, baseId, headId, steps, order });
 
 export interface DropInfo {
   shortId: string;

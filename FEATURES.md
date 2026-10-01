@@ -121,8 +121,16 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   - **reword** opens a popup with the commit message and **Cancel** / **Update message** (Ctrl/Cmd+Enter). The new
     first line shows in the list, a blue margin marks the commit, and **Edit message** opens the popup again. Choosing
     *pick* again drops the new message.
+- Click a commit in the list to see the files it changed in the right panel (the panel's × or Cancel rebase returns to your
+  working-directory changes); click a file there to open its diff over the rebase screen, and Back or Esc to return to the
+  list. The changes shown are those of the commit as it is now, whatever you reword, squash, drop or move.
 - Right-click a commit in the list for the same actions as shortcuts: **Reword commit**, **Squash commit** and **Drop commit**
-  (unavailable ones are greyed out with the reason).
+  (unavailable ones are greyed out with the reason), plus **Move commit up** / **Move commit down**, which change the order
+  of the commits in the plan (up = newer). Moved commits get a *moved* tag. Like a drop, a new order replays the commits
+  from the first moved one on (new content and ids, files reset: **the working directory must be clean**), and the whole
+  rebase is cancelled with nothing changed if a commit depends on one that now comes after it (for example a change to
+  a file moved below the commit that adds the file). Squash and drop are decided on the new order, and an action that no
+  longer fits after a move (a squash that became the oldest commit, ...) is reported and blocks **Start rebase**.
 - **Start rebase** applies everything at once; **Cancel rebase** (top or bottom, or Esc) leaves without changes.
 - Reworded and squashed commits get you as committer; every commit after the oldest change is rebuilt
   with the same content, author and date (new ids). Files, the staging area and other branches are not touched. The

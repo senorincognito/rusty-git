@@ -143,7 +143,9 @@ app rename so users keep their data. Don't change it casually.
   nothing staged, warns when the commit is already pushed.
 - **Interactive rebase** (graph context menu, `features/rebase/InteractiveRebase`): a full screen that covers the sidebar
   and the centre (`RepoView` wraps both in `.workarea`; they stay mounted, `visibility: hidden` + `inert`, so the graph
-  keeps its scroll position); the right panel stays and shows `Changes` (opening a working diff is ignored meanwhile).
+  keeps its scroll position); the right panel stays: `Changes`, or `CommitDetail` of the commit clicked in the list (`selectedId`/`onSelectCommit`, the shared
+  `selectedCommit` state). A file clicked there opens `FileDiff` in `.rebase-diff` over the rebase screen (the normal centre
+  `FileDiff` is suppressed while rebasing); `diffOpen` stops the rebase screen's own Escape. Working diffs are ignored meanwhile.
   The clicked commit is the base and is not edited; `rebase_plan` lists the commits after it on HEAD's first-parent line
   (max 500, newest first) plus `headId`. Each row has an action `<select>`: **pick**, **reword** (a `Modal` popup;
   a commit only becomes "reword" when the popup is confirmed), **squash** and **drop**. `apply_rebase` (command `apply_rebase_cmd`,
@@ -157,7 +159,11 @@ app rename so users keep their data. Don't change it casually.
   `cherrypick_commit` onto the rebuilt parent (a dropped commit maps to its rebuilt parent in `rebuilt`); a conflict
   abandons everything with the commit and files named, a merge commit after the first drop is refused, the working
   directory must be clean and a hard reset (not `move_head_to`) finishes. Groups before the first drop still reuse trees.
-  Reorder is not built; it would also be a replay and belongs in the same `ACTIONS` list.
+  **Reorder** (context menu *Move commit up/down*, UI state `order`) is sent as `order` (ids, newest first) to
+  `apply_rebase_ordered`; groups and squashes are built on the new order, `first_moved` is the first oldest-first position
+  that differs from the plan, and from there `replay_group` re-creates the commits one by one on `tip` (the previous
+  rebuilt commit; parents are `[tip]` in replay mode, mapped original parents otherwise). Same clean-working-directory,
+  merge and conflict rules as Drop. The UI computes `problem` (an action that no longer fits after a move) to block Start.
 - **Rename commit** (graph context menu) only for commits on the current branch. Rebuilds the commit and
   every later commit with identical trees/authors/dates, then moves the branch; other branches keep the old
   history. Warns about rewritten descendants and pushed commits.

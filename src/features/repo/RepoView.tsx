@@ -54,7 +54,11 @@ export default function RepoView({
     setOpenWorkingFile(null);
     setRebasing(base);
   };
-  const cancelRebase = useCallback(() => setRebasing(null), []);
+  const cancelRebase = useCallback(() => {
+    setRebasing(null);
+    setSelectedCommit(null); // back to the working-directory changes
+    setOpenFile(null);
+  }, []);
 
   const selectCommit = (commit: { id: string; shortId: string }) => {
     setSelectedCommit(commit);
@@ -184,7 +188,7 @@ export default function RepoView({
                   onResetCommit={resetCommit}
                 />
               </div>
-              {openFile && selectedCommit && (
+              {openFile && selectedCommit && !rebasing && (
                 <FileDiff
                   path={path}
                   source={{ kind: "commit", id: selectedCommit.id, shortId: selectedCommit.shortId }}
@@ -208,6 +212,9 @@ export default function RepoView({
             <InteractiveRebase
               path={path}
               base={rebasing}
+              selectedId={selectedCommit?.id ?? null}
+              diffOpen={openFile !== null}
+              onSelectCommit={selectCommit}
               onCancel={cancelRebase}
               onApplied={() => {
                 setRebasing(null);
@@ -215,6 +222,17 @@ export default function RepoView({
                 reload();
               }}
             />
+          )}
+          {/* A file of the selected commit opens over the rebase screen; Back returns to the list. */}
+          {rebasing && openFile && selectedCommit && (
+            <div className="rebase-diff">
+              <FileDiff
+                path={path}
+                source={{ kind: "commit", id: selectedCommit.id, shortId: selectedCommit.shortId }}
+                file={openFile}
+                onClose={() => setOpenFile(null)}
+              />
+            </div>
           )}
         </div>
         <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>

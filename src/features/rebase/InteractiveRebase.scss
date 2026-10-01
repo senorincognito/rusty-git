@@ -69,6 +69,12 @@
     background: $hover-tint;
   }
 
+  cursor: pointer;
+
+  &.selected {
+    background: $accent-tint;
+  }
+
   // The row a context menu is open on.
   &.ctx {
     background: $press-tint;
@@ -146,6 +152,11 @@
   &.pushed {
     color: $warn;
     border-color: $warn;
+  }
+
+  &.moved {
+    color: $accent;
+    border-color: $accent;
   }
 }
 
