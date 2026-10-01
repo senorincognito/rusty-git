@@ -197,6 +197,44 @@ app rename so users keep their data. Don't change it casually.
 - They like concise "what changed / what's not done" summaries, honest notes about what was not verified in
   the running UI, and a question about commit grouping at the end. They sometimes write in German.
 
+## Building and distribution
+
+**Decision: self-built only, for now.** No code-signing certificate, no CI release workflow, no auto-updater.
+The author builds locally and installs the result themselves. Don't add signing, an updater or a release
+pipeline unless asked; if distribution to others comes up, the options already discussed are:
+`tauri-action` on GitHub Actions (builds Windows + macOS and attaches them to a Release), `tauri-plugin-updater`
+(needs its own signing key pair, kept as a CI secret and never committed, plus a `latest.json` on the
+Release), and a Windows code-signing certificate to avoid the SmartScreen "unknown publisher" warning.
+
+- Build with the scripts in `scripts/`: `build-release.cmd` (Windows launcher, double-clickable; runs the
+  `.ps1` with `-ExecutionPolicy Bypass` because the default policy blocks unsigned .ps1 files) and
+  `build-release.sh` (macOS/Linux/Git Bash; tested here only under Git Bash on Windows). Both check the
+  toolchain, run `npm ci` if needed, build and list the fresh artifacts; options: `-Bundles all|nsis|msi|none`
+  / `--bundles`, `--no-bundle`, skip install, open folder. `.gitattributes` pins their line endings (sh = LF,
+  cmd/ps1 = CRLF), and the `.sh` must be committed with the executable bit
+  (`git update-index --chmod=+x scripts/build-release.sh`). Underneath it is `npm run tauri build` (verified
+  working, about 2.5 minutes for a cold release build, about 1.5 minutes for a rebuild). It produces, under `src-tauri/target/release/`: `rusty-git-client.exe` (6.9 MB, runs
+  standalone given WebView2), `bundle/nsis/Rusty Git Client_0.1.0_x64-setup.exe` (2.2 MB) and
+  `bundle/msi/Rusty Git Client_0.1.0_x64_en-US.msi` (3.1 MB). The first build downloads the WiX and NSIS tools
+  from GitHub. All of `target/` and `dist/` is git-ignored. Run it with `export PATH="$PATH:$HOME/.cargo/bin"`
+  in the Bash tool; a cold build prints one line per crate, so redirect output to a log in the scratchpad and
+  run it in the background.
+- Gotchas from writing the scripts: the `.cmd` pauses at the end only when started with no arguments (the
+  double-click case); set `NOPAUSE=1` when another program runs it. In the `.sh`, `set -e` + `pipefail`
+  turns a failing `find` on a missing folder (`bundle/macos` on Windows) into a silent script failure: guard
+  such commands with `|| true`. Installers are listed only if newer than the run's start, so stale ones from an
+  earlier build aren't reported as results. Keep the `.ps1` ASCII-only (Windows PowerShell 5.1 misreads
+  BOM-less UTF-8).
+- macOS builds can only be made on a Mac.
+- **The app shells out to the system `git`**, so users need Git installed and on PATH; the installers cannot
+  bundle it. The app reports "git executable not found" when it is missing.
+- Still the Tauri placeholder icons in `src-tauri/icons/` (replace via `npx tauri icon <logo.png>`).
+- The version lives in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; keep them in sync.
+- The bundle identifier `com.gitclient.app` stays (it keys the saved data), see "Persisted state". `tauri build`
+  warns that an identifier ending in `.app` is "not recommended" because it clashes with the macOS bundle
+  extension. Harmless on Windows; if macOS builds are ever made, consider switching the identifier then (which
+  resets saved settings and the recent-repos list once).
+
 ## Not implemented yet
 
 Tags and stashes in the sidebar; hunk/line staging from the diff view; checkout of remote branches; merge/rebase as standalone actions; discard

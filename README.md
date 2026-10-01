@@ -146,6 +146,60 @@ npm run build          # typecheck and build the frontend
 cargo test --manifest-path src-tauri/Cargo.toml   # backend tests
 ```
 
+## Building a standalone app
+
+This builds a normal desktop app you can install and run without the dev tools. It is a local build:
+nothing is signed, published or auto-updated.
+
+**Prerequisites** (the same as for development): [Node.js](https://nodejs.org), [Rust](https://rustup.rs)
+with the MSVC toolchain, and on Windows the Visual Studio C++ Build Tools. The first build also downloads
+the WiX and NSIS installer tools, so it needs an internet connection.
+
+**Windows.** Double-click `scripts\build-release.cmd`, or run it from a terminal:
+
+```bat
+scripts\build-release.cmd
+scripts\build-release.cmd -Bundles none -Open
+```
+
+**macOS / Linux / Git Bash.** Run the shell script (it is marked executable):
+
+```sh
+scripts/build-release.sh
+scripts/build-release.sh --no-bundle --open
+```
+
+Both scripts check the prerequisites, run `npm ci` if `node_modules` is missing, build, and print where
+the results are. The first build compiles every dependency and takes a few minutes; later ones take about
+a minute and a half. If you prefer to do it by hand: `npm ci` then `npm run tauri build`.
+
+| Option (Windows / shell) | Effect |
+| --- | --- |
+| `-Bundles all\|nsis\|msi\|none` / `--bundles <list>` | Which installers to build (default: all for your OS) |
+| `-Bundles none` / `--no-bundle` | Only the standalone app, no installers (fastest) |
+| `-SkipInstall` / `--skip-install` | Don't run `npm ci` when `node_modules` is missing |
+| `-Open` / `--open` | Open the output folder when done |
+
+**Results** are in `src-tauri/target/release/`:
+
+| File | What it is |
+| --- | --- |
+| `rusty-git-client.exe` | The app itself. Runs standalone; needs the WebView2 runtime (included in Windows 11) |
+| `bundle/nsis/Rusty Git Client_<version>_x64-setup.exe` | Setup installer (Start menu entry, uninstaller; installs per user) |
+| `bundle/msi/Rusty Git Client_<version>_x64_en-US.msi` | MSI installer |
+
+On macOS the results are an `.app` and a `.dmg` under `bundle/`, and a Mac is required to build them.
+
+**Good to know**
+- The app runs the system `git` for fetch, pull, push and similar, so **Git must be installed and on the
+  PATH** on any machine that uses it. The installers cannot include it.
+- The builds are **unsigned**. Windows SmartScreen shows an "unknown publisher" warning the first time:
+  choose *More info*, then *Run anyway*. (macOS Gatekeeper warns in the same way.)
+- The icons are still the Tauri defaults. Replace them with `npx tauri icon <your-logo.png>`.
+- The version is set in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; change
+  all three together before building a new release.
+- The build scripts are tested on Windows. The shell script has not been run on macOS or Linux yet.
+
 ## Layout
 
 Backend (`src-tauri/src/`), one module per concern, each with tests where it has logic:
