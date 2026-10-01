@@ -114,6 +114,17 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   session while hidden, restarts when you switch repositories.
 - Anything you run there (commits, checkouts, ...) shows up in the UI through live reload.
 
+### Keyboard shortcuts
+| Key | Action |
+| --- | --- |
+| `Esc` | Close the diff in the centre (same as **Back**); also closes menus and dialogs and cancels inline editors |
+| `Ctrl` + `` ` `` | Show or hide the terminal |
+| `Ctrl`/`Cmd` + `Enter` | Commit (staging panel) or Update (rename dialog) |
+| `Enter` / `Space` | Open the focused file row; `Enter` confirms an inline branch rename |
+| `←` / `→` on a panel's resize handle | Resize it (hold `Shift` for bigger steps) |
+
+Esc leaves text fields and the terminal alone, so it never interferes with typing.
+
 ## Not yet implemented
 
 - Diff view and commit detail panel

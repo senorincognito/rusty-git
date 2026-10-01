@@ -83,6 +83,20 @@ export default function FileDiff({
     return () => window.removeEventListener("focus", refresh);
   }, [isWorking, refreshKey, fetchDiff, start]);
 
+  // Escape closes the diff, like the back button. Leave it alone whenever Escape already means
+  // something else: typing in a field (commit message, branch name, the terminal) or an open menu/dialog.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (document.querySelector(".ctxmenu, .modal-backdrop")) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -105,7 +119,7 @@ export default function FileDiff({
         <button
           className="ghost"
           onClick={onClose}
-          title={isWorking ? "Close the diff" : "Back to the commit graph"}
+          title={isWorking ? "Close the diff (Esc)" : "Back to the commit graph (Esc)"}
         >
           {isWorking ? "← Back" : "← Back to graph"}
         </button>

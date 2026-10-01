@@ -94,6 +94,11 @@ app rename so users keep their data. Don't change it casually.
 - **Tests** build real repos in temp dirs (git2 and, for network behaviour, the system git with local bare
   remotes). Add a test with every backend feature. Commit messages end with the attribution trailer given in
   the session context.
+- **Keyboard**: a global (window-level) `Escape` handler must ignore events from editable targets
+  (`input`/`textarea`/`select`/contenteditable; xterm's hidden textarea counts) and must do nothing while a
+  `.ctxmenu` or `.modal-backdrop` is open, because those handle their own Escape. `FileDiff` is the model.
+  Existing shortcuts: Esc (close diff / menus / dialogs / editors), Ctrl+\` terminal (`RepoView`),
+  Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles. Keep the README table in sync.
 - Match the surrounding comment density: short comments that explain *why*, none restating the code.
 
 ## Product decisions already made (keep consistent)
