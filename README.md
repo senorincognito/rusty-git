@@ -61,6 +61,10 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 - Title-bar buttons run the system `git`, so your credential helper and SSH setup apply.
 - Fetch updates all remotes (with prune). Pull is fast-forward only, so it never creates a
   surprise merge. Push publishes a new branch to `origin` and sets its upstream.
+- **Force push**: right-click the Push button, or click the small ▾ beside it. It asks for
+  confirmation first (and says how many remote commits will be discarded), then runs
+  `git push --force-with-lease`, which is refused if the remote moved since your last fetch.
+  Use it after amending or renaming a commit that was already pushed.
 - Buttons show `↓n` / `↑n` counts and are disabled with a tooltip when they can't work.
 
 ### Terminal

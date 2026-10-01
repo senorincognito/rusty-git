@@ -7,10 +7,10 @@ export async function pickFolder(): Promise<string | null> {
 }
 
 /** Native yes/no dialog. */
-export const confirmDialog = (message: string, title: string, danger = false) =>
+export const confirmDialog = (message: string, title: string, danger = false, okLabel = "Delete") =>
   ask(message, {
     title,
     kind: danger ? "warning" : "info",
-    okLabel: "Delete",
+    okLabel,
     cancelLabel: "Cancel",
   });

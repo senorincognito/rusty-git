@@ -35,6 +35,7 @@ pub fn run() {
             remotes::add_origin_remote,
             sync::get_sync_status,
             sync::git_fetch,
+            sync::git_force_push,
             sync::git_pull,
             sync::git_push,
             terminal::term_start,

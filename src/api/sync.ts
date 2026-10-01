@@ -12,3 +12,5 @@ export const getSyncStatus = (path: string) => invoke<SyncStatus>("get_sync_stat
 export const gitFetch = (path: string) => invoke<string>("git_fetch", { path });
 export const gitPull = (path: string) => invoke<string>("git_pull", { path });
 export const gitPush = (path: string) => invoke<string>("git_push", { path });
+/** Overwrites the upstream with the local branch (--force-with-lease). */
+export const gitForcePush = (path: string) => invoke<string>("git_force_push", { path });

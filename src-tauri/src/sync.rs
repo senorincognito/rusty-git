@@ -125,6 +125,20 @@ fn push(path: &str) -> Result<String, String> {
     run_git(path, &["push", "--set-upstream", remote, "HEAD"])
 }
 
+/// Overwrites the upstream with the local branch, e.g. after an amend or rename. Uses
+/// --force-with-lease, so it refuses if the remote branch moved since the last fetch (somebody
+/// else's commits are never thrown away unseen).
+fn force_push(path: &str) -> Result<String, String> {
+    let s = sync_status(&open(path)?)?;
+    if s.branch.is_none() {
+        return Err("Cannot push a detached HEAD. Check out a branch first.".into());
+    }
+    if s.upstream.is_none() {
+        return Err("This branch has not been pushed yet, so there is nothing to overwrite. Use Push instead.".into());
+    }
+    run_git(path, &["push", "--force-with-lease"])
+}
+
 async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> Result<T, String> + Send + 'static,
 ) -> Result<T, String> {
@@ -151,6 +165,11 @@ pub async fn git_pull(path: String) -> Result<String, String> {
 #[tauri::command]
 pub async fn git_push(path: String) -> Result<String, String> {
     blocking(move || push(&path)).await
+}
+
+#[tauri::command]
+pub async fn git_force_push(path: String) -> Result<String, String> {
+    blocking(move || force_push(&path)).await
 }
 
 #[cfg(test)]
@@ -229,6 +248,52 @@ mod tests {
         commit_file(&a, "h.txt", "four");
         fetch(ap).unwrap();
         assert!(pull(ap).is_err());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn force_push_overwrites_but_respects_the_lease() {
+        let base = tmp("force");
+        let origin = base.join("origin.git");
+        let (a, b) = (base.join("a"), base.join("b"));
+        fs::create_dir_all(&a).unwrap();
+        git(&base, &["init", "-q", "--bare", "-b", "main", origin.to_str().unwrap()]);
+        git(&a, &["init", "-q", "-b", "main"]);
+        git(&a, &["remote", "add", "origin", origin.to_str().unwrap()]);
+        let (ap, bp) = (a.to_str().unwrap(), b.to_str().unwrap());
+        let amend = |dir: &Path, msg: &str| {
+            git(dir, &["-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "--amend", "-m", msg]);
+        };
+        let head = |dir: &Path| git(dir, &["rev-parse", "HEAD"]);
+        let remote_main = || git(&base, &["--git-dir", origin.to_str().unwrap(), "rev-parse", "main"]);
+
+        // Nothing to force before the branch has been published.
+        commit_file(&a, "f.txt", "one");
+        assert!(force_push(ap).unwrap_err().contains("not been pushed"));
+        push(ap).unwrap();
+        git(&base, &["clone", "-q", origin.to_str().unwrap(), bp]);
+
+        // After an amend a normal push is rejected, a force push goes through.
+        amend(&a, "one, amended");
+        assert!(push(ap).is_err());
+        force_push(ap).unwrap();
+        assert_eq!(remote_main(), head(&a));
+
+        // Somebody else pushes; our next force push must not clobber it unseen.
+        git(&b, &["fetch", "-q"]);
+        git(&b, &["reset", "-q", "--hard", "origin/main"]);
+        commit_file(&b, "g.txt", "theirs");
+        push(bp).unwrap();
+        let theirs = remote_main();
+        amend(&a, "one, amended again");
+        assert!(force_push(ap).is_err());
+        assert_eq!(remote_main(), theirs);
+
+        // Once we have fetched and seen their commit, the overwrite is allowed.
+        fetch(ap).unwrap();
+        force_push(ap).unwrap();
+        assert_eq!(remote_main(), head(&a));
 
         let _ = fs::remove_dir_all(&base);
     }
