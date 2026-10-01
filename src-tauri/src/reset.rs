@@ -39,10 +39,7 @@ fn prepare<'r>(repo: &'r Repository, id: &str) -> Result<(Commit<'r>, Commit<'r>
     if repo.state() != RepositoryState::Clean {
         return Err("Finish the merge, rebase or other operation in progress first".into());
     }
-    let head = repo
-        .head()
-        .and_then(|h| h.peel_to_commit())
-        .map_err(|_| "There are no commits yet".to_string())?;
+    let head = repo.head().and_then(|h| h.peel_to_commit()).map_err(|_| "There are no commits yet".to_string())?;
     let oid = Oid::from_str(id).map_err(err)?;
     let target = repo.find_commit(oid).map_err(err)?;
     if crate::stash::stash_index_of(repo, oid).is_some() {
@@ -83,10 +80,7 @@ fn reset_info(repo: &Repository, id: &str) -> Result<ResetInfo, String> {
         _ => 0,
     };
     let summary = |oid: &Oid| -> String {
-        repo.find_commit(*oid)
-            .ok()
-            .and_then(|c| c.summary().ok().flatten().map(str::to_string))
-            .unwrap_or_default()
+        repo.find_commit(*oid).ok().and_then(|c| c.summary().ok().flatten().map(str::to_string)).unwrap_or_default()
     };
     let head_ref = repo.head().map_err(err)?;
 
@@ -180,12 +174,8 @@ mod tests {
     fn status(repo: &Repository) -> Vec<(String, Status)> {
         let mut o = StatusOptions::new();
         o.include_untracked(true).recurse_untracked_dirs(true);
-        let mut v: Vec<_> = repo
-            .statuses(Some(&mut o))
-            .unwrap()
-            .iter()
-            .map(|e| (e.path().unwrap().to_string(), e.status()))
-            .collect();
+        let mut v: Vec<_> =
+            repo.statuses(Some(&mut o)).unwrap().iter().map(|e| (e.path().unwrap().to_string(), e.status())).collect();
         v.sort_by(|x, y| x.0.cmp(&y.0));
         v
     }

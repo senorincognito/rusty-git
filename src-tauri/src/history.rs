@@ -126,9 +126,8 @@ fn rename_commit(repo: &Repository, id: &str, message: &str) -> Result<Oid, Stri
         } else {
             (String::from_utf8_lossy(c.message_raw_bytes()).into_owned(), c.committer().to_owned())
         };
-        let new = repo
-            .commit(None, &c.author(), &committer, &text, &c.tree().map_err(err)?, &parent_refs)
-            .map_err(err)?;
+        let new =
+            repo.commit(None, &c.author(), &committer, &text, &c.tree().map_err(err)?, &parent_refs).map_err(err)?;
         rebuilt.insert(oid, new);
     }
 
@@ -242,9 +241,8 @@ fn drop_commit(repo: &Repository, id: &str) -> Result<(), String> {
         }
         let tree = repo.find_tree(merged.write_tree_to(repo).map_err(err)?).map_err(err)?;
         let message = String::from_utf8_lossy(commit.message_raw_bytes()).into_owned();
-        let rebuilt = repo
-            .commit(None, &commit.author(), &commit.committer(), &message, &tree, &[&new_tip])
-            .map_err(err)?;
+        let rebuilt =
+            repo.commit(None, &commit.author(), &commit.committer(), &message, &tree, &[&new_tip]).map_err(err)?;
         new_tip = repo.find_commit(rebuilt).map_err(err)?;
     }
 
@@ -460,7 +458,13 @@ mod tests {
 
         // The first commit, an id that is not on the branch, and a detached HEAD are refused.
         let first = log(&repo).len() - 1;
-        let first_id = repo.revwalk().map(|mut w| { w.push_head().unwrap(); w.nth(first).unwrap().unwrap() }).unwrap();
+        let first_id = repo
+            .revwalk()
+            .map(|mut w| {
+                w.push_head().unwrap();
+                w.nth(first).unwrap().unwrap()
+            })
+            .unwrap();
         assert!(drop_commit(&repo, &first_id.to_string()).unwrap_err().contains("first commit"));
         assert!(drop_commit(&repo, &c.to_string()).is_err(), "c was re-created: the old id is no longer on the branch");
         assert!(drop_commit(&repo, "not-an-id").is_err());
@@ -520,7 +524,7 @@ mod tests {
         let info = drop_info(&repo, &m.to_string()).unwrap();
         assert!(info.pushed);
         assert_eq!((info.later_commits, info.later_pushed), (1, 0), "c is not pushed yet");
-        assert_eq!(drop_info(&repo, &c.to_string()).unwrap().pushed, false);
+        assert!(!drop_info(&repo, &c.to_string()).unwrap().pushed);
 
         // Dropping the merge replays c onto the merge's first parent.
         drop_commit(&repo, &m.to_string()).unwrap();

@@ -107,7 +107,11 @@ pub(crate) fn run_git_with(path: &str, args: &[&str], timeout: Option<Duration>)
         }
     };
     let Some(status) = status else {
-        return Err(format!("git {} timed out after {}s", args.first().unwrap_or(&""), timeout.map_or(0, |t| t.as_secs())));
+        return Err(format!(
+            "git {} timed out after {}s",
+            args.first().unwrap_or(&""),
+            timeout.map_or(0, |t| t.as_secs())
+        ));
     };
     // Only now that git has exited are the pipes guaranteed to close.
     let stdout = String::from_utf8_lossy(&out_reader.join().unwrap_or_default()).into_owned();
@@ -369,12 +373,8 @@ fn force_push(path: &str) -> Result<String, String> {
     run_git(path, &["push", "--force-with-lease"])
 }
 
-async fn blocking<T: Send + 'static>(
-    f: impl FnOnce() -> Result<T, String> + Send + 'static,
-) -> Result<T, String> {
-    tauri::async_runtime::spawn_blocking(f)
-        .await
-        .map_err(|e| e.to_string())?
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -439,10 +439,7 @@ mod tests {
     fn commit_file(dir: &Path, file: &str, msg: &str) {
         fs::write(dir.join(file), msg).unwrap();
         git(dir, &["add", "-A"]);
-        git(
-            dir,
-            &["-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "-m", msg],
-        );
+        git(dir, &["-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "-m", msg]);
     }
 
     #[test]
@@ -577,8 +574,8 @@ mod tests {
         #[cfg(not(windows))]
         let slow = "alias.slow=!sleep 20";
         let started = Instant::now();
-        let e = run_git_with(dir.to_str().unwrap(), &["-c", slow, "slow"], Some(Duration::from_millis(500)))
-            .unwrap_err();
+        let e =
+            run_git_with(dir.to_str().unwrap(), &["-c", slow, "slow"], Some(Duration::from_millis(500))).unwrap_err();
         assert!(e.contains("timed out"), "{e}");
         assert!(started.elapsed() < Duration::from_secs(15));
         let _ = fs::remove_dir_all(&dir);

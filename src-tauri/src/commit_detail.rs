@@ -57,9 +57,7 @@ fn commit_detail(repo: &Repository, id: &str) -> Result<CommitDetail, String> {
 
     let mut opts = DiffOptions::new();
     opts.include_typechange(true);
-    let mut diff = repo
-        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts))
-        .map_err(err)?;
+    let mut diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts)).map_err(err)?;
     let mut find = DiffFindOptions::new();
     find.renames(true);
     diff.find_similar(Some(&mut find)).map_err(err)?;
@@ -91,11 +89,7 @@ fn commit_detail(repo: &Repository, id: &str) -> Result<CommitDetail, String> {
         let extra = repo.diff_tree_to_tree(None, Some(&untracked), None).map_err(err)?;
         for d in extra.deltas() {
             if let Some(p) = d.new_file().path() {
-                files.push(CommitFile {
-                    path: p.to_string_lossy().replace('\\', "/"),
-                    old_path: None,
-                    status: "new",
-                });
+                files.push(CommitFile { path: p.to_string_lossy().replace('\\', "/"), old_path: None, status: "new" });
             }
         }
     }
@@ -192,7 +186,8 @@ fn fnv(hash: &mut u64, bytes: &[u8]) {
 /// Like [`render_diff`], but also returns each line's exact bytes (parallel to `lines`; empty for
 /// headers and notes), which stage/discard need to rebuild file contents without touching line endings.
 pub(crate) fn render_diff_raw(diff: &git2::Diff, full_file: bool) -> Result<(FileDiff, Vec<Vec<u8>>), String> {
-    let mut out = FileDiff { lines: Vec::new(), binary: false, truncated: false, additions: 0, deletions: 0, blocks: Vec::new() };
+    let mut out =
+        FileDiff { lines: Vec::new(), binary: false, truncated: false, additions: 0, deletions: 0, blocks: Vec::new() };
     let mut raw: Vec<Vec<u8>> = Vec::new();
     diff.print(DiffFormat::Patch, |delta, _hunk, line| {
         if delta.flags().is_binary() || line.origin() == 'B' {
@@ -302,9 +297,7 @@ fn file_diff(
     let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
 
     let mut opts = diff_options(path, old_path, full_file);
-    let mut diff = repo
-        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts))
-        .map_err(err)?;
+    let mut diff = repo.diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts)).map_err(err)?;
     if old_path.is_some() {
         let mut find = DiffFindOptions::new();
         find.renames(true);
@@ -326,11 +319,9 @@ fn file_diff(
 /// The message, author and changed files of a commit.
 #[tauri::command]
 pub async fn get_commit_detail(path: String, id: String) -> Result<CommitDetail, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        commit_detail(&Repository::discover(&path).map_err(err)?, &id)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || commit_detail(&Repository::discover(&path).map_err(err)?, &id))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// One file of a commit as a line-by-line diff, for the file view.
@@ -396,10 +387,7 @@ mod tests {
         fs::write(dir.join("src").join("big.txt"), &body).unwrap();
         let c1 = commit_all(&repo, "Initial\n\nFirst paragraph.\nSecond line.", &[]);
         let d = commit_detail(&repo, &c1.to_string()).unwrap();
-        assert_eq!(
-            statuses(&d),
-            [("a.txt".into(), "new"), ("b.txt".into(), "new"), ("src/big.txt".into(), "new")]
-        );
+        assert_eq!(statuses(&d), [("a.txt".into(), "new"), ("b.txt".into(), "new"), ("src/big.txt".into(), "new")]);
         assert_eq!((d.summary.as_str(), d.body.as_str()), ("Initial", "First paragraph.\nSecond line."));
         assert_eq!((d.author.as_str(), d.short_id.len(), d.parents.len(), d.is_merge), ("Ann", 7, 0, false));
 
@@ -412,7 +400,12 @@ mod tests {
         let d = commit_detail(&repo, &c2.to_string()).unwrap();
         assert_eq!(
             statuses(&d),
-            [("a.txt".into(), "modified"), ("b.txt".into(), "deleted"), ("c.txt".into(), "new"), ("moved.txt".into(), "renamed")]
+            [
+                ("a.txt".into(), "modified"),
+                ("b.txt".into(), "deleted"),
+                ("c.txt".into(), "new"),
+                ("moved.txt".into(), "renamed")
+            ]
         );
         let renamed = d.files.iter().find(|f| f.status == "renamed").unwrap();
         assert_eq!(renamed.old_path.as_deref(), Some("src/big.txt"));
@@ -421,14 +414,16 @@ mod tests {
         assert_eq!(d.parents, [c1.to_string()[..7].to_string()]);
 
         // Merge commits are flagged and diffed against the first parent.
-        let side = repo.commit(
-            None,
-            &Signature::now("Ann", "a@e.com").unwrap(),
-            &Signature::now("Ann", "a@e.com").unwrap(),
-            "side",
-            &repo.find_commit(c1).unwrap().tree().unwrap(),
-            &[&repo.find_commit(c1).unwrap()],
-        ).unwrap();
+        let side = repo
+            .commit(
+                None,
+                &Signature::now("Ann", "a@e.com").unwrap(),
+                &Signature::now("Ann", "a@e.com").unwrap(),
+                "side",
+                &repo.find_commit(c1).unwrap().tree().unwrap(),
+                &[&repo.find_commit(c1).unwrap()],
+            )
+            .unwrap();
         let m = commit_all(&repo, "Merge", &[c2, side]);
         let d = commit_detail(&repo, &m.to_string()).unwrap();
         assert!(d.is_merge && d.parents.len() == 2);

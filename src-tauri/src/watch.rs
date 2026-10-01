@@ -14,11 +14,7 @@ pub struct RepoWatcher(Mutex<Option<Debouncer<RecommendedWatcher>>>);
 /// HEAD, the index or any ref changes, no matter which program made the change.
 /// Object files are deliberately not watched: they churn during every commit.
 #[tauri::command]
-pub fn watch_repo(
-    app: AppHandle,
-    state: State<RepoWatcher>,
-    path: String,
-) -> Result<(), String> {
+pub fn watch_repo(app: AppHandle, state: State<RepoWatcher>, path: String) -> Result<(), String> {
     let repo = Repository::discover(&path).map_err(|e| e.message().to_string())?;
     let git_dir = repo.path().to_path_buf();
 
@@ -31,13 +27,11 @@ pub fn watch_repo(
 
     let w = debouncer.watcher();
     // HEAD, index, packed-refs, MERGE_HEAD, ...
-    w.watch(&git_dir, RecursiveMode::NonRecursive)
-        .map_err(|e| e.to_string())?;
+    w.watch(&git_dir, RecursiveMode::NonRecursive).map_err(|e| e.to_string())?;
     // Branches, remotes and tags (the folder may be missing in a brand-new repo).
     let refs = git_dir.join("refs");
     if refs.exists() {
-        w.watch(&refs, RecursiveMode::Recursive)
-            .map_err(|e| e.to_string())?;
+        w.watch(&refs, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
     }
 
     *state.0.lock().unwrap() = Some(debouncer);

@@ -45,7 +45,9 @@ fn locate(
     }
     // An untracked file has no index version to build from (a staged new file is fine to unstage).
     if !staged && repo.index().map_err(err)?.get_path(Path::new(path), 0).is_none() {
-        return Err("This file is not tracked yet, so it can't be changed hunk by hunk. Stage the whole file instead.".into());
+        return Err(
+            "This file is not tracked yet, so it can't be changed hunk by hunk. Stage the whole file instead.".into()
+        );
     }
     Ok((diff, raw))
 }
@@ -252,7 +254,7 @@ pub async fn discard_hunk_cmd(path: String, file: String, block: usize, block_id
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commit_detail::{working_diff_raw as diff_of};
+    use crate::commit_detail::working_diff_raw as diff_of;
     use git2::Signature;
     use std::fs;
 

@@ -125,7 +125,12 @@ fn unmerged_remote_commits(repo: &Repository, remote: &str, name: &str) -> Resul
 
 /// Removes `<remote>/<name>` on the server (`git push origin --delete`) with the system git, so
 /// the user's credentials apply. git also drops the local remote-tracking ref.
-fn delete_remote_branch_checked(repo_path: &str, repo: &Repository, remote: &str, name: &str) -> Result<String, String> {
+fn delete_remote_branch_checked(
+    repo_path: &str,
+    repo: &Repository,
+    remote: &str,
+    name: &str,
+) -> Result<String, String> {
     let info = remote_info(repo, remote)?.ok_or_else(|| format!("No remote named \"{remote}\""))?;
     if !info.branches.iter().any(|b| b == name) {
         return Err(format!("Remote branch \"{remote}/{name}\" not found. Fetch and try again."));
@@ -174,15 +179,16 @@ fn rename_remote_branch_checked(
     let lease = format!("--force-with-lease=refs/heads/{name}:{tip}");
     let create = format!("{tip}:refs/heads/{new_name}");
     let delete = format!(":refs/heads/{name}");
-    let output = crate::sync::run_git(repo_path, &["push", "--atomic", &lease, remote, &create, &delete]).or_else(|e| {
-        // Only for servers that can't do atomic pushes (a rejected lease also mentions "atomic",
-        // and must NOT be retried: that would create the new name without removing the old one).
-        if e.to_lowercase().contains("does not support --atomic") {
-            crate::sync::run_git(repo_path, &["push", &lease, remote, &create, &delete])
-        } else {
-            Err(e)
-        }
-    })?;
+    let output =
+        crate::sync::run_git(repo_path, &["push", "--atomic", &lease, remote, &create, &delete]).or_else(|e| {
+            // Only for servers that can't do atomic pushes (a rejected lease also mentions "atomic",
+            // and must NOT be retried: that would create the new name without removing the old one).
+            if e.to_lowercase().contains("does not support --atomic") {
+                crate::sync::run_git(repo_path, &["push", &lease, remote, &create, &delete])
+            } else {
+                Err(e)
+            }
+        })?;
 
     // Local branches that tracked the old name now track the new one.
     let fresh = Repository::discover(repo_path).map_err(err)?;
@@ -293,7 +299,12 @@ pub async fn delete_remote_branch(path: String, remote: String, name: String) ->
 
 /// Renames a branch on a remote server (see [`rename_remote_branch_checked`]). Network call.
 #[tauri::command]
-pub async fn rename_remote_branch(path: String, remote: String, name: String, new_name: String) -> Result<String, String> {
+pub async fn rename_remote_branch(
+    path: String,
+    remote: String,
+    name: String,
+    new_name: String,
+) -> Result<String, String> {
     let p = path.clone();
     blocking(path, move |r| rename_remote_branch_checked(&p, r, &remote, &name, &new_name)).await
 }
@@ -432,8 +443,7 @@ mod tests {
     }
 
     fn git(dir: &std::path::Path, args: &[&str]) -> String {
-        crate::sync::run_git(dir.to_str().unwrap(), args)
-            .unwrap_or_else(|e| panic!("git {args:?}: {e}"))
+        crate::sync::run_git(dir.to_str().unwrap(), args).unwrap_or_else(|e| panic!("git {args:?}: {e}"))
     }
 
     #[test]
@@ -514,10 +524,18 @@ mod tests {
         let repo = Repository::open(&a).unwrap();
         assert!(rename_remote_branch_checked(ap, &repo, "origin", "main", "primary").unwrap_err().contains("upstream"));
         assert!(rename_remote_branch_checked(ap, &repo, "origin", "nope", "x").unwrap_err().contains("not found"));
-        assert!(rename_remote_branch_checked(ap, &repo, "origin", "feature", "main").unwrap_err().contains("already exists"));
-        assert!(rename_remote_branch_checked(ap, &repo, "origin", "feature", "feature").unwrap_err().contains("unchanged"));
-        assert!(rename_remote_branch_checked(ap, &repo, "origin", "feature", "bad name").unwrap_err().contains("not a valid"));
-        assert!(rename_remote_branch_checked(ap, &repo, "origin", "feature", "main/x").unwrap_err().contains("conflicts"));
+        assert!(rename_remote_branch_checked(ap, &repo, "origin", "feature", "main")
+            .unwrap_err()
+            .contains("already exists"));
+        assert!(rename_remote_branch_checked(ap, &repo, "origin", "feature", "feature")
+            .unwrap_err()
+            .contains("unchanged"));
+        assert!(rename_remote_branch_checked(ap, &repo, "origin", "feature", "bad name")
+            .unwrap_err()
+            .contains("not a valid"));
+        assert!(rename_remote_branch_checked(ap, &repo, "origin", "feature", "main/x")
+            .unwrap_err()
+            .contains("conflicts"));
         assert!(heads().contains("refs/heads/feature"));
 
         // Rename: new name on the server, old one gone, tracking branches follow.
@@ -538,7 +556,10 @@ mod tests {
         let repo = Repository::open(&a).unwrap();
         assert!(rename_remote_branch_checked(ap, &repo, "origin", "renamed", "again").is_err());
         let on_server = heads();
-        assert!(on_server.contains(&theirs) && on_server.contains("refs/heads/renamed") && !on_server.contains("again"), "{on_server}");
+        assert!(
+            on_server.contains(&theirs) && on_server.contains("refs/heads/renamed") && !on_server.contains("again"),
+            "{on_server}"
+        );
 
         let _ = std::fs::remove_dir_all(&base);
     }

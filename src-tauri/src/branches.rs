@@ -25,13 +25,7 @@ fn local_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
         let (branch, _) = item.map_err(err)?;
         let Some(name) = branch.name().ok().flatten().map(str::to_string) else { continue };
 
-        let mut info = BranchInfo {
-            name,
-            is_head: branch.is_head(),
-            upstream: None,
-            ahead: 0,
-            behind: 0,
-        };
+        let mut info = BranchInfo { name, is_head: branch.is_head(), upstream: None, ahead: 0, behind: 0 };
         if let Ok(up) = branch.upstream() {
             info.upstream = up.name().ok().flatten().map(str::to_string);
             if let (Some(l), Some(u)) = (branch.get().target(), up.get().target()) {
@@ -43,22 +37,15 @@ fn local_branches(repo: &Repository) -> Result<Vec<BranchInfo>, String> {
         }
         out.push(info);
     }
-    out.sort_by(|a, b| {
-        a.name
-            .to_lowercase()
-            .cmp(&b.name.to_lowercase())
-            .then_with(|| a.name.cmp(&b.name))
-    });
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.name.cmp(&b.name)));
     Ok(out)
 }
 
 #[tauri::command]
 pub async fn get_local_branches(path: String) -> Result<Vec<BranchInfo>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        local_branches(&Repository::discover(&path).map_err(err)?)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || local_branches(&Repository::discover(&path).map_err(err)?))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Trims `name` and checks that it can be used as a branch name.
@@ -76,9 +63,7 @@ pub(crate) fn validate_branch_name(name: &str) -> Result<&str, String> {
 /// Renames a local branch that is not checked out. Its upstream and branch settings move with it.
 fn rename_branch(repo: &Repository, name: &str, new_name: &str) -> Result<(), String> {
     let new_name = validate_branch_name(new_name)?;
-    let mut branch = repo
-        .find_branch(name, BranchType::Local)
-        .map_err(|_| format!("Branch \"{name}\" not found"))?;
+    let mut branch = repo.find_branch(name, BranchType::Local).map_err(|_| format!("Branch \"{name}\" not found"))?;
     if branch.is_head() {
         return Err("The checked-out branch can't be renamed here. Switch to another branch first.".into());
     }
@@ -89,7 +74,8 @@ fn rename_branch(repo: &Repository, name: &str, new_name: &str) -> Result<(), St
     // clash only after it has already removed the old ref (see the safety net below).
     for existing in local_branches(repo)? {
         let clash = existing.name != name
-            && (existing.name.starts_with(&format!("{new_name}/")) || new_name.starts_with(&format!("{}/", existing.name)));
+            && (existing.name.starts_with(&format!("{new_name}/"))
+                || new_name.starts_with(&format!("{}/", existing.name)));
         if clash {
             return Err(format!("\"{new_name}\" conflicts with the existing branch \"{}\"", existing.name));
         }
@@ -147,27 +133,19 @@ pub async fn rename_local_branch(path: String, name: String, new_name: String) -
 
 #[tauri::command]
 pub async fn create_branch(path: String, name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        create_and_checkout(&Repository::discover(&path).map_err(err)?, &name)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || create_and_checkout(&Repository::discover(&path).map_err(err)?, &name))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Switches to an existing local branch, like `git switch`. Safe: fails instead of
 /// overwriting uncommitted changes that the target branch would touch.
 fn checkout_branch(repo: &Repository, name: &str) -> Result<(), String> {
-    let branch = repo
-        .find_branch(name, BranchType::Local)
-        .map_err(|_| format!("Branch \"{name}\" not found"))?;
+    let branch = repo.find_branch(name, BranchType::Local).map_err(|_| format!("Branch \"{name}\" not found"))?;
     if branch.is_head() {
         return Ok(());
     }
-    let refname = branch
-        .get()
-        .name()
-        .map(str::to_string)
-        .map_err(|_| "Branch name is not valid UTF-8".to_string())?;
+    let refname = branch.get().name().map(str::to_string).map_err(|_| "Branch name is not valid UTF-8".to_string())?;
     let target = branch.get().peel(ObjectType::Commit).map_err(err)?;
 
     // Update files first; HEAD moves only if that succeeded.
@@ -175,8 +153,7 @@ fn checkout_branch(repo: &Repository, name: &str) -> Result<(), String> {
     opts.safe();
     repo.checkout_tree(&target, Some(&mut opts)).map_err(|e| {
         if e.code() == git2::ErrorCode::Conflict {
-            "Your local changes would be overwritten by this checkout. Commit or discard them first."
-                .to_string()
+            "Your local changes would be overwritten by this checkout. Commit or discard them first.".to_string()
         } else {
             err(e)
         }
@@ -186,19 +163,15 @@ fn checkout_branch(repo: &Repository, name: &str) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn checkout_local_branch(path: String, name: String) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        checkout_branch(&Repository::discover(&path).map_err(err)?, &name)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || checkout_branch(&Repository::discover(&path).map_err(err)?, &name))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Commits on `name` that are neither in the current HEAD nor on its upstream, i.e. work
 /// that would become unreachable by deleting the branch (same rule as `git branch -d`).
 fn unmerged_commits(repo: &Repository, name: &str) -> Result<usize, String> {
-    let branch = repo
-        .find_branch(name, BranchType::Local)
-        .map_err(|_| format!("Branch \"{name}\" not found"))?;
+    let branch = repo.find_branch(name, BranchType::Local).map_err(|_| format!("Branch \"{name}\" not found"))?;
     let tip = branch.get().peel_to_commit().map_err(err)?.id();
 
     let mut walk = repo.revwalk().map_err(err)?;
@@ -213,9 +186,7 @@ fn unmerged_commits(repo: &Repository, name: &str) -> Result<usize, String> {
 }
 
 fn delete_branch_checked(repo: &Repository, name: &str) -> Result<(), String> {
-    let mut branch = repo
-        .find_branch(name, BranchType::Local)
-        .map_err(|_| format!("Branch \"{name}\" not found"))?;
+    let mut branch = repo.find_branch(name, BranchType::Local).map_err(|_| format!("Branch \"{name}\" not found"))?;
     if branch.is_head() {
         return Err("Cannot delete the branch that is currently checked out".into());
     }
@@ -225,11 +196,9 @@ fn delete_branch_checked(repo: &Repository, name: &str) -> Result<(), String> {
 /// Number of commits that deleting `name` would leave unreachable (0 when fully merged).
 #[tauri::command]
 pub async fn count_unmerged_commits(path: String, name: String) -> Result<usize, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        unmerged_commits(&Repository::discover(&path).map_err(err)?, &name)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || unmerged_commits(&Repository::discover(&path).map_err(err)?, &name))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Deletes a local branch. The checked-out branch is refused.

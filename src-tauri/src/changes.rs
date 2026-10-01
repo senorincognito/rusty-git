@@ -82,8 +82,7 @@ fn unstage(repo: &Repository, paths: &[String]) -> Result<(), String> {
     match repo.head() {
         Ok(head) => {
             let target = head.peel(ObjectType::Commit).map_err(err)?;
-            repo.reset_default(Some(&target), paths.iter().map(String::as_str))
-                .map_err(err)
+            repo.reset_default(Some(&target), paths.iter().map(String::as_str)).map_err(err)
         }
         // No commits yet: unstaging just means dropping the entry from the index.
         Err(_) => {
@@ -101,9 +100,7 @@ fn commit_staged(repo: &mut Repository, message: &str) -> Result<Oid, String> {
     if message.trim().is_empty() {
         return Err("Commit message is empty".into());
     }
-    let sig = repo
-        .signature()
-        .map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
+    let sig = repo.signature().map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
 
     // Concluding a merge: the merge heads become additional parents.
     // (Collected first because mergehead_foreach needs `&mut repo`.)
@@ -139,9 +136,7 @@ fn commit_staged(repo: &mut Repository, message: &str) -> Result<Oid, String> {
     }
 
     let parent_refs: Vec<_> = parents.iter().collect();
-    let oid = repo
-        .commit(Some("HEAD"), &sig, &sig, &message, &tree, &parent_refs)
-        .map_err(err)?;
+    let oid = repo.commit(Some("HEAD"), &sig, &sig, &message, &tree, &parent_refs).map_err(err)?;
     if merging {
         repo.cleanup_state().map_err(err)?;
     }
@@ -158,13 +153,10 @@ fn amend_head(repo: &Repository, message: &str) -> Result<Oid, String> {
     if repo.state() == RepositoryState::Merge {
         return Err("Finish the merge before amending".into());
     }
-    let head = repo
-        .head()
-        .and_then(|h| h.peel_to_commit())
-        .map_err(|_| "There is no previous commit to amend".to_string())?;
-    let committer = repo
-        .signature()
-        .map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
+    let head =
+        repo.head().and_then(|h| h.peel_to_commit()).map_err(|_| "There is no previous commit to amend".to_string())?;
+    let committer =
+        repo.signature().map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
 
     let mut index = repo.index().map_err(err)?;
     if index.has_conflicts() {
@@ -175,8 +167,7 @@ fn amend_head(repo: &Repository, message: &str) -> Result<Oid, String> {
         return Err("Nothing to amend: no staged changes and the message is unchanged".into());
     }
 
-    head.amend(Some("HEAD"), None, Some(&committer), None, Some(&message), Some(&tree))
-        .map_err(err)
+    head.amend(Some("HEAD"), None, Some(&committer), None, Some(&message), Some(&tree)).map_err(err)
 }
 
 #[derive(Serialize, Debug)]
@@ -354,10 +345,7 @@ mod tests {
         repo.remote("origin", "https://example.com/r.git").unwrap();
         let branch = repo.head().unwrap().shorthand().unwrap().to_string();
         repo.reference(&format!("refs/remotes/origin/{branch}"), third, true, "test").unwrap();
-        repo.find_branch(&branch, BranchType::Local)
-            .unwrap()
-            .set_upstream(Some(&format!("origin/{branch}")))
-            .unwrap();
+        repo.find_branch(&branch, BranchType::Local).unwrap().set_upstream(Some(&format!("origin/{branch}"))).unwrap();
         assert!(head_commit(&repo).unwrap().pushed);
         fs::write(dir.join("c.txt"), "x").unwrap();
         stage(&repo, &["c.txt".into()]).unwrap();

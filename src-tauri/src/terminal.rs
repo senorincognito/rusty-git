@@ -148,11 +148,9 @@ pub fn term_start(
 #[tauri::command]
 pub fn term_write(state: State<Terminal>, id: u64, data: String) -> Result<(), String> {
     match state.0.lock().unwrap().as_mut() {
-        Some(s) if s.id == id => s
-            .writer
-            .write_all(data.as_bytes())
-            .and_then(|_| s.writer.flush())
-            .map_err(|e| e.to_string()),
+        Some(s) if s.id == id => {
+            s.writer.write_all(data.as_bytes()).and_then(|_| s.writer.flush()).map_err(|e| e.to_string())
+        }
         _ => Ok(()), // stale session: drop the input
     }
 }

@@ -69,7 +69,10 @@ struct Lane {
     dashed: bool,
 }
 
-fn collect_refs(repo: &Repository) -> Result<(HashMap<Oid, Vec<RefLabel>>, Vec<Oid>), git2::Error> {
+/// Ref labels per commit, and the commits that start the walk.
+type RefsAndTips = (HashMap<Oid, Vec<RefLabel>>, Vec<Oid>);
+
+fn collect_refs(repo: &Repository) -> Result<RefsAndTips, git2::Error> {
     let mut labels: HashMap<Oid, Vec<RefLabel>> = HashMap::new();
     let mut tips = Vec::new();
     let head_name = repo.head().ok().and_then(|h| h.name().ok().map(str::to_string));
@@ -103,11 +106,7 @@ fn collect_refs(repo: &Repository) -> Result<(HashMap<Oid, Vec<RefLabel>>, Vec<O
         if !h.is_branch() {
             if let Some(oid) = h.target() {
                 tips.push(oid);
-                labels.entry(oid).or_default().push(RefLabel {
-                    name: "HEAD".into(),
-                    kind: "branch",
-                    is_head: true,
-                });
+                labels.entry(oid).or_default().push(RefLabel { name: "HEAD".into(), kind: "branch", is_head: true });
             }
         }
     }
@@ -161,8 +160,7 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
     }
 
     let mut walk = repo.revwalk().map_err(|e| e.message().to_string())?;
-    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
-        .map_err(|e| e.message().to_string())?;
+    walk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME).map_err(|e| e.message().to_string())?;
     for tip in tips {
         walk.push(tip).map_err(|e| e.message().to_string())?;
     }
@@ -231,12 +229,8 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
             commit.parent_ids().collect()
         };
 
-        let matches: Vec<usize> = lanes
-            .iter()
-            .enumerate()
-            .filter(|(_, l)| l.is_some_and(|l| l.oid == oid))
-            .map(|(i, _)| i)
-            .collect();
+        let matches: Vec<usize> =
+            lanes.iter().enumerate().filter(|(_, l)| l.is_some_and(|l| l.oid == oid)).map(|(i, _)| i).collect();
 
         let (col, color) = match matches.first() {
             Some(&i) => (i, lanes[i].unwrap().color),
@@ -321,9 +315,7 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
 /// Async so the (blocking) walk runs off the main thread.
 #[tauri::command]
 pub async fn get_graph(path: String, limit: usize) -> Result<Graph, String> {
-    tauri::async_runtime::spawn_blocking(move || build_graph(&path, limit))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || build_graph(&path, limit)).await.map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]

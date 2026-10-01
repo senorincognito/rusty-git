@@ -59,9 +59,8 @@ pub(crate) fn untracked_tree<'r>(repo: &'r Repository, commit: &Commit<'r>) -> O
 /// Moves every uncommitted change into a new stash and cleans the working directory: staged and
 /// unstaged edits, and untracked files (ignored files stay where they are).
 pub(crate) fn save_stash(repo: &mut Repository, message: Option<&str>) -> Result<Oid, String> {
-    let signature = repo
-        .signature()
-        .map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
+    let signature =
+        repo.signature().map_err(|_| "Git identity not set. Configure user.name and user.email.".to_string())?;
     if repo.head().and_then(|h| h.peel_to_commit()).is_err() {
         return Err("Make a first commit before stashing".into());
     }
@@ -139,11 +138,9 @@ fn drop_stash(repo: &mut Repository, id: &str) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn get_stashes(path: String) -> Result<Vec<StashEntry>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        list_stashes(&mut Repository::discover(&path).map_err(err)?)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || list_stashes(&mut Repository::discover(&path).map_err(err)?))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Stashes all uncommitted changes, with an optional message. Returns the stash commit id.
@@ -257,7 +254,7 @@ mod tests {
         assert!(untracked_tree(&repo, &stash).unwrap().get_name("untracked.txt").is_some());
         let plain = repo.find_commit(second).unwrap();
         // libgit2 records an untracked-files commit even when there are none: it is just empty.
-        assert!(untracked_tree(&repo, &plain).map_or(true, |t| t.is_empty()), "no untracked files in the second stash");
+        assert!(untracked_tree(&repo, &plain).is_none_or(|t| t.is_empty()), "no untracked files in the second stash");
 
         let _ = fs::remove_dir_all(&dir);
     }

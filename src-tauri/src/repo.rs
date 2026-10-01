@@ -37,24 +37,15 @@ fn save_recents(app: &AppHandle, list: &[RepoInfo]) -> Result<(), String> {
 }
 
 fn describe(repo: &Repository) -> Result<RepoInfo, String> {
-    let root = repo
-        .workdir()
-        .or_else(|| Some(repo.path()))
-        .ok_or("repository has no path")?;
+    let root = repo.workdir().or_else(|| Some(repo.path())).ok_or("repository has no path")?;
     let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     // Strip the Windows verbatim prefix (\\?\) so paths stay readable.
     let path = root.to_string_lossy().trim_start_matches(r"\\?\").to_string();
-    let name = Path::new(&path)
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.clone());
+    let name = Path::new(&path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.clone());
 
     let (head, detached) = match repo.head() {
         Ok(h) if h.is_branch() => (h.shorthand().ok().map(str::to_string), false),
-        Ok(h) => (
-            h.target().map(|oid| oid.to_string()[..7].to_string()),
-            true,
-        ),
+        Ok(h) => (h.target().map(|oid| oid.to_string()[..7].to_string()), true),
         // Unborn branch (fresh `git init`): HEAD points at a ref that doesn't exist yet.
         Err(_) => (None, false),
     };
@@ -65,8 +56,7 @@ fn describe(repo: &Repository) -> Result<RepoInfo, String> {
 /// Opens the repo containing `path` (searching upward) and records it as most recent.
 #[tauri::command]
 pub fn open_repo(app: AppHandle, path: String) -> Result<RepoInfo, String> {
-    let repo = Repository::discover(&path)
-        .map_err(|e| format!("Not a git repository: {path} ({})", e.message()))?;
+    let repo = Repository::discover(&path).map_err(|e| format!("Not a git repository: {path} ({})", e.message()))?;
     let info = describe(&repo)?;
 
     let mut recents = load_recents(&app);
