@@ -859,6 +859,107 @@ body.resizing {
   color: #e0a64a;
 }
 
+/* Rename-commit dialog in the right panel (same footprint as .changes) */
+.renamebox {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+}
+
+.renamehead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.renamehead code {
+  font: 12px Consolas, monospace;
+  text-transform: none;
+  color: var(--accent);
+}
+
+.renamebody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+}
+
+.renamebody label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.renamebody textarea {
+  flex: 1;
+  min-height: 120px;
+  resize: none;
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.renamebody textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.renamebody p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.renamebody .warn {
+  color: #e0a64a;
+}
+
+.renamebody .note {
+  color: var(--muted);
+}
+
+.renamefoot {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.secondary {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 16px;
+}
+
+.secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.secondary:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* Push button with an attached arrow that opens the push menu */
 .splitbtn {
   display: flex;

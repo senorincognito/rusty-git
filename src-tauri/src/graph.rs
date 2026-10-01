@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use git2::{Oid, Repository, Sort};
 use serde::Serialize;
@@ -32,6 +32,8 @@ pub struct GraphRow {
     /// Unix seconds.
     pub time: i64,
     pub parents: Vec<String>,
+    /// HEAD or an ancestor of it: the commits that can be rewritten on the current branch.
+    pub on_head: bool,
     pub refs: Vec<RefLabel>,
     pub col: usize,
     pub color: usize,
@@ -146,6 +148,12 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
         c
     };
 
+    // Rows come children-first, so one pass can tell which commits are ancestors of HEAD.
+    let mut head_ancestry: HashSet<Oid> = HashSet::new();
+    if let Some(head) = repo.head().ok().and_then(|h| h.peel_to_commit().ok()) {
+        head_ancestry.insert(head.id());
+    }
+
     let mut rows = Vec::new();
     let mut max_lanes = 0usize;
     let mut has_more = false;
@@ -213,6 +221,11 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
             lanes.pop();
         }
 
+        let on_head = head_ancestry.contains(&oid);
+        if on_head {
+            head_ancestry.extend(commit.parent_ids());
+        }
+
         let author = commit.author();
         rows.push(GraphRow {
             id: oid.to_string(),
@@ -222,6 +235,7 @@ fn build_graph(path: &str, limit: usize) -> Result<Graph, String> {
             email: author.email().unwrap_or("").to_string(),
             time: commit.time().seconds(),
             parents: commit.parent_ids().map(|p| p.to_string()).collect(),
+            on_head,
             refs: labels.remove(&oid).unwrap_or_default(),
             col,
             color,
@@ -299,6 +313,26 @@ mod tests {
         let g = build_graph(dir.to_str().unwrap(), 2).unwrap();
         assert_eq!(g.rows.len(), 2);
         assert!(g.has_more);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn marks_commits_reachable_from_head() {
+        let dir = std::env::temp_dir().join(format!("gc-onhead-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+
+        // main: a - b      side: a - s  (side is not an ancestor of HEAD)
+        let a = commit(&repo, "a", &[], Some("refs/heads/main"));
+        let b = commit(&repo, "b", &[a], Some("refs/heads/main"));
+        let s = commit(&repo, "s", &[a], Some("refs/heads/side"));
+        repo.set_head("refs/heads/main").unwrap();
+
+        let g = build_graph(dir.to_str().unwrap(), 100).unwrap();
+        let on_head = |id: Oid| g.rows.iter().find(|r| r.id == id.to_string()).unwrap().on_head;
+        assert!(on_head(b) && on_head(a));
+        assert!(!on_head(s));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

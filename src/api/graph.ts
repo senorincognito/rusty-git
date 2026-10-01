@@ -20,6 +20,8 @@ export interface GraphRow {
   /** Unix seconds. */
   time: number;
   parents: string[];
+  /** HEAD or an ancestor of it: can be rewritten on the current branch. */
+  onHead: boolean;
   refs: RefLabel[];
   col: number;
   color: number;

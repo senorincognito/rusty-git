@@ -190,21 +190,9 @@ pub struct HeadCommit {
 
 /// The last commit, or None on a branch without commits.
 fn head_commit(repo: &Repository) -> Option<HeadCommit> {
-    let head_ref = repo.head().ok()?;
-    let commit = head_ref.peel_to_commit().ok()?;
+    let commit = repo.head().ok()?.peel_to_commit().ok()?;
 
-    let mut pushed = false;
-    if head_ref.is_branch() {
-        let upstream_tip = head_ref
-            .shorthand()
-            .ok()
-            .and_then(|n| repo.find_branch(n, BranchType::Local).ok())
-            .and_then(|b| b.upstream().ok())
-            .and_then(|u| u.get().target());
-        if let Some(up) = upstream_tip {
-            pushed = up == commit.id() || repo.graph_descendant_of(up, commit.id()).unwrap_or(false);
-        }
-    }
+    let pushed = crate::history::is_pushed(repo, commit.id());
     Some(HeadCommit {
         short_id: commit.id().to_string()[..7].to_string(),
         message: commit.message().unwrap_or("").trim_end().to_string(),

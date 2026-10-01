@@ -1,6 +1,7 @@
 mod branches;
 mod changes;
 mod graph;
+mod history;
 mod remotes;
 mod repo;
 mod sync;
@@ -26,6 +27,8 @@ pub fn run() {
             changes::unstage_paths,
             changes::create_commit,
             graph::get_graph,
+            history::get_rename_info,
+            history::rename_commit_message,
             repo::open_repo,
             repo::get_recent_repos,
             repo::remove_recent_repo,

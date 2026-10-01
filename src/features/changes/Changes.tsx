@@ -9,7 +9,6 @@ import {
   type FileChange,
   type HeadCommit,
 } from "@/api/changes";
-import ResizablePanel from "@/components/ResizablePanel";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const BADGE: Record<ChangeKind, string> = {
@@ -58,10 +57,13 @@ function FileList(props: {
 export default function Changes({
   path,
   refreshKey = 0,
+  hidden = false,
   onCommitted,
 }: {
   path: string;
   refreshKey?: number;
+  /** Keep mounted (so the draft message survives) but not visible. */
+  hidden?: boolean;
   onCommitted: () => void;
 }) {
   const [changes, setChanges] = useState<FileChange[]>([]);
@@ -159,78 +161,76 @@ export default function Changes({
   const canCommit = !busy && message.trim().length > 0 && (amend || staged.length > 0);
 
   return (
-    <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
-      <aside className="changes">
-        <FileList
-          title="Unstaged"
-          files={unstaged}
-          actionLabel="Stage"
-          onAction={(p) => run(() => stagePaths(path, p))}
-          onActionAll={() =>
-            run(() =>
-              stagePaths(
-                path,
-                unstaged.map((f) => f.path),
-              ),
-            )
-          }
-        />
-        <FileList
-          title="Staged"
-          files={staged}
-          actionLabel="Unstage"
-          onAction={(p) => run(() => unstagePaths(path, p))}
-          onActionAll={() =>
-            run(() =>
-              unstagePaths(
-                path,
-                staged.map((f) => f.path),
-              ),
-            )
-          }
-        />
-        <div className="commitbox">
-          <div className="commit-toolbar">
-            <label
-              className={"switch" + (!head || busy ? " disabled" : "")}
-              title={
-                head
-                  ? `Replace the last commit (${head.shortId}) instead of creating a new one`
-                  : "There is no commit to amend yet"
-              }
-            >
-              <input
-                type="checkbox"
-                role="switch"
-                checked={amend}
-                disabled={!head || busy}
-                onChange={(e) => toggleAmend(e.target.checked)}
-              />
-              <span className="switch-track" aria-hidden="true" />
-              <span>Amend previous commit</span>
-            </label>
-          </div>
-          {amend && head?.pushed && (
-            <p className="warn">
-              This commit is already pushed. Amending it rewrites history, so it will need a force push.
-            </p>
-          )}
-          <textarea
-            placeholder="Commit message"
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canCommit) commit();
-            }}
-            rows={4}
-          />
-          {error && <p className="error">{error}</p>}
-          <button className="primary" disabled={!canCommit} onClick={commit}>
-            {amend ? "Amend commit" : "Commit"}
-            {staged.length > 0 ? ` (${staged.length})` : ""}
-          </button>
+    <aside className="changes" style={hidden ? { display: "none" } : undefined}>
+      <FileList
+        title="Unstaged"
+        files={unstaged}
+        actionLabel="Stage"
+        onAction={(p) => run(() => stagePaths(path, p))}
+        onActionAll={() =>
+          run(() =>
+            stagePaths(
+              path,
+              unstaged.map((f) => f.path),
+            ),
+          )
+        }
+      />
+      <FileList
+        title="Staged"
+        files={staged}
+        actionLabel="Unstage"
+        onAction={(p) => run(() => unstagePaths(path, p))}
+        onActionAll={() =>
+          run(() =>
+            unstagePaths(
+              path,
+              staged.map((f) => f.path),
+            ),
+          )
+        }
+      />
+      <div className="commitbox">
+        <div className="commit-toolbar">
+          <label
+            className={"switch" + (!head || busy ? " disabled" : "")}
+            title={
+              head
+                ? `Replace the last commit (${head.shortId}) instead of creating a new one`
+                : "There is no commit to amend yet"
+            }
+          >
+            <input
+              type="checkbox"
+              role="switch"
+              checked={amend}
+              disabled={!head || busy}
+              onChange={(e) => toggleAmend(e.target.checked)}
+            />
+            <span className="switch-track" aria-hidden="true" />
+            <span>Amend previous commit</span>
+          </label>
         </div>
-      </aside>
-    </ResizablePanel>
+        {amend && head?.pushed && (
+          <p className="warn">
+            This commit is already pushed. Amending it rewrites history, so it will need a force push.
+          </p>
+        )}
+        <textarea
+          placeholder="Commit message"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canCommit) commit();
+          }}
+          rows={4}
+        />
+        {error && <p className="error">{error}</p>}
+        <button className="primary" disabled={!canCommit} onClick={commit}>
+          {amend ? "Amend commit" : "Commit"}
+          {staged.length > 0 ? ` (${staged.length})` : ""}
+        </button>
+      </div>
+    </aside>
   );
 }

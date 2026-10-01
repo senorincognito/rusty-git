@@ -44,6 +44,16 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   HEAD, index and ref changes. File lists also refresh when
   the window regains focus, so edits made in your editor show up.
 
+### Commit graph context menu
+- Right-click a commit: **Rename commit** opens an editor in the right panel with the full
+  message and **Update** / **Cancel** buttons (Esc cancels, Ctrl+Enter updates). Only
+  commits on the current branch can be renamed.
+- Update rewrites the commit's message and rebuilds every later commit on the branch on top
+  of it (same files, authors and dates, new ids), then moves the branch. Files and the index
+  are untouched, so there can be no conflicts. Other branches keep their old history. The
+  panel warns when later commits are rewritten and when the commit is already pushed (a
+  force push is then needed).
+
 ### Branches and remotes (left panel)
 - **Local branches**: alphabetical list with the current branch highlighted and `↑n` / `↓n`
   when ahead of or behind the upstream. Double-click a branch to check it out (safe

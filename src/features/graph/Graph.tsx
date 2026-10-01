@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "@/api/graph";
+import ContextMenu from "@/components/ContextMenu";
 
 const ROW_H = 28;
 const LANE_W = 16;
@@ -51,7 +52,15 @@ const dateFmt = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
 });
 
-export default function Graph({ path, refreshKey = 0 }: { path: string; refreshKey?: number }) {
+export default function Graph({
+  path,
+  refreshKey = 0,
+  onRenameCommit,
+}: {
+  path: string;
+  refreshKey?: number;
+  onRenameCommit: (commit: { id: string; shortId: string }) => void;
+}) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [limit, setLimit] = useState(PAGE);
   const [error, setError] = useState<string | null>(null);
@@ -60,12 +69,15 @@ export default function Graph({ path, refreshKey = 0 }: { path: string; refreshK
   const [viewH, setViewH] = useState(600);
   const scroller = useRef<HTMLDivElement>(null);
   const loading = useRef(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; row: GraphRow } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
 
   // Reset when switching repositories.
   useEffect(() => {
     setGraph(null);
     setLimit(PAGE);
     setSelected(null);
+    setMenu(null);
     scroller.current?.scrollTo({ top: 0 });
   }, [path]);
 
@@ -115,6 +127,11 @@ export default function Graph({ path, refreshKey = 0 }: { path: string; refreshK
             className={"row" + (row.id === selected ? " selected" : "")}
             style={{ top: (first + i) * ROW_H, height: ROW_H }}
             onClick={() => setSelected(row.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setSelected(row.id);
+              setMenu({ x: e.clientX, y: e.clientY, row });
+            }}
           >
             <RowGraph row={row} width={laneWidth} />
             <div className="subject">
@@ -131,6 +148,21 @@ export default function Graph({ path, refreshKey = 0 }: { path: string; refreshK
           </div>
         ))}
       </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          items={[
+            {
+              label: "Rename commit",
+              disabled: !menu.row.onHead,
+              title: menu.row.onHead ? undefined : "Only commits on the current branch can be renamed",
+              onClick: () => onRenameCommit({ id: menu.row.id, shortId: menu.row.shortId }),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

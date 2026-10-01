@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
+import ResizablePanel from "@/components/ResizablePanel";
 import Changes from "@/features/changes/Changes";
 import Graph from "@/features/graph/Graph";
+import RenameCommit from "@/features/rename/RenameCommit";
 import Sidebar from "@/features/sidebar/Sidebar";
 import TerminalPanel from "@/features/terminal/TerminalPanel";
 import BranchButton from "@/features/toolbar/BranchButton";
@@ -21,6 +23,7 @@ export default function RepoView({
 }) {
   const [graphKey, setGraphKey] = useState(0);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [renaming, setRenaming] = useState<{ id: string; shortId: string } | null>(null);
   const path = repo.path;
 
   // Redraw everything and refresh the branch label (a first commit creates the branch).
@@ -74,8 +77,21 @@ export default function RepoView({
       </header>
       <div className="body">
         <Sidebar path={path} refreshKey={graphKey} onChanged={reload} />
-        <Graph path={path} refreshKey={graphKey} />
-        <Changes path={path} refreshKey={graphKey} onCommitted={reload} />
+        <Graph path={path} refreshKey={graphKey} onRenameCommit={setRenaming} />
+        <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
+          {renaming && (
+            <RenameCommit
+              path={path}
+              commit={renaming}
+              onClose={() => setRenaming(null)}
+              onRenamed={() => {
+                setRenaming(null);
+                reload();
+              }}
+            />
+          )}
+          <Changes path={path} refreshKey={graphKey} hidden={renaming !== null} onCommitted={reload} />
+        </ResizablePanel>
       </div>
       <TerminalPanel path={path} open={terminalOpen} onClose={() => setTerminalOpen(false)} />
     </div>
