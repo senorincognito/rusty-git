@@ -48,6 +48,11 @@ and React + TypeScript + Vite. Targets Windows and macOS.
 - Click a commit in the graph: the right panel switches to that commit's message, author, date,
   parents and the files it changed (added, modified, deleted, renamed with their old path).
   Merge commits are shown against their first parent.
+- Click a changed file: the centre area shows the file with the commit's changes marked in
+  place (added lines in green with `+`, removed lines in red with `-`, old and new line
+  numbers). A **Full file** switch toggles between the whole file and just the changed hunks
+  with three lines of context. Binary and very large files are not previewed, and diffs are
+  capped at 20,000 lines. **Back to graph** returns to the commit graph exactly where you left it.
 - While you have uncommitted changes, a notice at the top of the panel says how many files
   changed in the working directory, with a **View changes** button that closes the commit view
   and returns to the staging panel (your draft commit message is kept). The × does the same.

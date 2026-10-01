@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import type { CommitFile } from "@/api/commit";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import ResizablePanel from "@/components/ResizablePanel";
 import Changes from "@/features/changes/Changes";
 import CommitDetail from "@/features/commit/CommitDetail";
+import FileDiff from "@/features/commit/FileDiff";
 import Graph from "@/features/graph/Graph";
 import RenameCommit from "@/features/rename/RenameCommit";
 import Sidebar from "@/features/sidebar/Sidebar";
@@ -27,7 +29,18 @@ export default function RepoView({
   const [renaming, setRenaming] = useState<{ id: string; shortId: string } | null>(null);
   // The commit whose files are shown in the right panel (instead of the working-directory changes).
   const [selectedCommit, setSelectedCommit] = useState<{ id: string; shortId: string } | null>(null);
+  // A file of the selected commit shown in the centre instead of the graph.
+  const [openFile, setOpenFile] = useState<CommitFile | null>(null);
   const path = repo.path;
+
+  const selectCommit = (commit: { id: string; shortId: string }) => {
+    setSelectedCommit(commit);
+    setOpenFile(null);
+  };
+  const closeCommit = () => {
+    setSelectedCommit(null);
+    setOpenFile(null);
+  };
 
   // Redraw everything and refresh the branch label (a first commit creates the branch).
   const reload = useCallback(() => {
@@ -80,13 +93,21 @@ export default function RepoView({
       </header>
       <div className="body">
         <Sidebar path={path} refreshKey={graphKey} onChanged={reload} />
-        <Graph
-          path={path}
-          refreshKey={graphKey}
-          selectedId={selectedCommit?.id ?? null}
-          onSelectCommit={setSelectedCommit}
-          onRenameCommit={setRenaming}
-        />
+        <div className="center">
+          {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
+          <div className={"center-pane" + (openFile ? " hidden" : "")}>
+            <Graph
+              path={path}
+              refreshKey={graphKey}
+              selectedId={selectedCommit?.id ?? null}
+              onSelectCommit={selectCommit}
+              onRenameCommit={setRenaming}
+            />
+          </div>
+          {openFile && selectedCommit && (
+            <FileDiff path={path} commit={selectedCommit} file={openFile} onClose={() => setOpenFile(null)} />
+          )}
+        </div>
         <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
           {renaming && (
             <RenameCommit
@@ -95,7 +116,7 @@ export default function RepoView({
               onClose={() => setRenaming(null)}
               onRenamed={() => {
                 setRenaming(null);
-                setSelectedCommit(null); // renaming gives the commit (and its successors) new ids
+                closeCommit(); // renaming gives the commit (and its successors) new ids
                 reload();
               }}
             />
@@ -105,7 +126,9 @@ export default function RepoView({
               path={path}
               commit={selectedCommit}
               refreshKey={graphKey}
-              onClose={() => setSelectedCommit(null)}
+              selectedPath={openFile?.path ?? null}
+              onSelectFile={setOpenFile}
+              onClose={closeCommit}
             />
           )}
           <Changes

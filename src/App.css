@@ -1109,3 +1109,175 @@ body.resizing {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Centre column: the graph, or a file diff on top of it */
+.center {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.center-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Hidden but still laid out, so the graph keeps its scroll position */
+.center-pane.hidden {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.filelist li.selectable {
+  cursor: pointer;
+}
+
+.filelist li.selected {
+  background: rgba(63, 167, 160, 0.18);
+}
+
+.filelist li.selectable:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* File diff view */
+.filediff {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.fd-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.fd-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.fd-from,
+.fd-commit {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fd-commit {
+  font-family: Consolas, monospace;
+  margin-right: auto;
+}
+
+.fd-stats {
+  flex: none;
+  font: 12px Consolas, monospace;
+}
+
+.fd-stats .add {
+  color: #58c98b;
+}
+
+.fd-stats .del {
+  color: var(--danger);
+}
+
+.fd-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  font: 12.5px Consolas, "Cascadia Mono", Menlo, monospace;
+  tab-size: 4;
+}
+
+.fd-list {
+  position: relative;
+}
+
+.dl {
+  position: absolute;
+  left: 0;
+  display: flex;
+  height: 20px;
+  line-height: 20px;
+  min-width: 100%;
+  width: max-content;
+  white-space: pre;
+}
+
+.dl .ln {
+  flex: none;
+  width: var(--ln);
+  padding-right: 8px;
+  text-align: right;
+  color: var(--muted);
+  user-select: none;
+}
+
+.dl .mk {
+  flex: none;
+  width: 2ch;
+  text-align: center;
+  user-select: none;
+}
+
+.dl .tx {
+  padding: 0 24px 0 4px;
+}
+
+.dl.add {
+  background: rgba(88, 201, 139, 0.14);
+}
+
+.dl.add .ln {
+  background: rgba(88, 201, 139, 0.22);
+}
+
+.dl.add .mk {
+  color: #58c98b;
+}
+
+.dl.del {
+  background: rgba(229, 100, 107, 0.14);
+}
+
+.dl.del .ln {
+  background: rgba(229, 100, 107, 0.22);
+}
+
+.dl.del .mk {
+  color: var(--danger);
+}
+
+.dl.hunk {
+  background: rgba(78, 161, 255, 0.1);
+  color: #4ea1ff;
+}
+
+.dl.hunk .tx {
+  padding-left: 12px;
+}
+
+.dl.note {
+  color: var(--muted);
+  font-style: italic;
+}

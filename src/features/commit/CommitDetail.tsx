@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { getStatus } from "@/api/changes";
-import { getCommitDetail, type CommitDetail as CommitDetailData } from "@/api/commit";
+import { getCommitDetail, type CommitDetail as CommitDetailData, type CommitFile } from "@/api/commit";
 import FileBadge from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 
@@ -14,11 +14,16 @@ export default function CommitDetail({
   path,
   commit,
   refreshKey = 0,
+  selectedPath,
+  onSelectFile,
   onClose,
 }: {
   path: string;
   commit: { id: string; shortId: string };
   refreshKey?: number;
+  /** The file currently open in the centre view, if any. */
+  selectedPath: string | null;
+  onSelectFile: (file: CommitFile) => void;
   onClose: () => void;
 }) {
   const [detail, setDetail] = useState<CommitDetailData | null>(null);
@@ -104,7 +109,20 @@ export default function CommitDetail({
             {detail.files.length === 0 && <p className="muted side-msg">This commit changes no files.</p>}
             <ul>
               {detail.files.map((f) => (
-                <li key={f.path} title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}>
+                <li
+                  key={f.path}
+                  className={"selectable" + (f.path === selectedPath ? " selected" : "")}
+                  title={f.oldPath ? `${f.oldPath} → ${f.path}` : f.path}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelectFile(f)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelectFile(f);
+                    }
+                  }}
+                >
                   <FileBadge kind={f.status} />
                   <span className="fname">{f.path}</span>
                 </li>

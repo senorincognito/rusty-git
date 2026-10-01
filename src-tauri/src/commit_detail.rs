@@ -1,8 +1,14 @@
-use git2::{Delta, DiffFindOptions, DiffOptions, Oid, Repository};
+use git2::{Delta, DiffFindOptions, DiffFormat, DiffOptions, Oid, Repository};
 use serde::Serialize;
 
 /// More than this many files are cut off (the total is still reported).
 const MAX_FILES: usize = 2000;
+/// A file diff longer than this many lines is cut off.
+const MAX_DIFF_LINES: usize = 20_000;
+/// Files above this size are treated like binary files and not shown.
+const MAX_DIFF_BYTES: i64 = 5 * 1024 * 1024;
+/// Enough context to cover any file: the diff then contains the whole file.
+const FULL_FILE_CONTEXT: u32 = 1_000_000;
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -105,11 +111,122 @@ fn commit_detail(repo: &Repository, id: &str) -> Result<CommitDetail, String> {
     })
 }
 
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffLine {
+    /// "ctx" | "add" | "del" | "hunk" (a hunk header) | "note" (e.g. no newline at end of file)
+    pub kind: &'static str,
+    pub old_no: Option<u32>,
+    pub new_no: Option<u32>,
+    pub text: String,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FileDiff {
+    pub lines: Vec<DiffLine>,
+    /// Binary or too large to show.
+    pub binary: bool,
+    /// The diff was cut off after the maximum number of lines.
+    pub truncated: bool,
+    pub additions: usize,
+    pub deletions: usize,
+}
+
+/// What one file of a commit changed, against the first parent. With `full_file` the whole file
+/// is returned with the added and removed lines marked in place; otherwise only the changed
+/// hunks with three lines of context.
+fn file_diff(
+    repo: &Repository,
+    id: &str,
+    path: &str,
+    old_path: Option<&str>,
+    full_file: bool,
+) -> Result<FileDiff, String> {
+    let oid = Oid::from_str(id).map_err(err)?;
+    let commit = repo.find_commit(oid).map_err(err)?;
+    let tree = commit.tree().map_err(err)?;
+    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
+
+    let mut opts = DiffOptions::new();
+    opts.include_typechange(true)
+        .context_lines(if full_file { FULL_FILE_CONTEXT } else { 3 })
+        .max_size(MAX_DIFF_BYTES)
+        // Paths are literal here: names with [, * or ? must not be read as patterns.
+        .disable_pathspec_match(true)
+        .pathspec(path);
+    if let Some(old) = old_path {
+        opts.pathspec(old);
+    }
+    let mut diff = repo
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts))
+        .map_err(err)?;
+    if old_path.is_some() {
+        let mut find = DiffFindOptions::new();
+        find.renames(true);
+        diff.find_similar(Some(&mut find)).map_err(err)?;
+    }
+
+    let mut out = FileDiff { lines: Vec::new(), binary: false, truncated: false, additions: 0, deletions: 0 };
+    diff.print(DiffFormat::Patch, |delta, _hunk, line| {
+        if delta.flags().is_binary() || line.origin() == 'B' {
+            out.binary = true;
+            return true;
+        }
+        let kind = match line.origin() {
+            '+' => {
+                out.additions += 1;
+                "add"
+            }
+            '-' => {
+                out.deletions += 1;
+                "del"
+            }
+            ' ' => "ctx",
+            'H' if !full_file => "hunk",
+            '>' | '<' | '=' => "note",
+            _ => return true, // file headers, and the single hunk header of a full-file diff
+        };
+        if out.lines.len() >= MAX_DIFF_LINES {
+            out.truncated = true;
+            return true; // keep counting additions and deletions
+        }
+        let text = match kind {
+            "note" => "No newline at end of file".to_string(),
+            _ => String::from_utf8_lossy(line.content()).trim_end_matches(['\n', '\r']).to_string(),
+        };
+        out.lines.push(DiffLine { kind, old_no: line.old_lineno(), new_no: line.new_lineno(), text });
+        true
+    })
+    .map_err(err)?;
+
+    if out.binary {
+        out.lines.clear();
+    }
+    Ok(out)
+}
+
 /// The message, author and changed files of a commit.
 #[tauri::command]
 pub async fn get_commit_detail(path: String, id: String) -> Result<CommitDetail, String> {
     tauri::async_runtime::spawn_blocking(move || {
         commit_detail(&Repository::discover(&path).map_err(err)?, &id)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// One file of a commit as a line-by-line diff, for the file view.
+#[tauri::command]
+pub async fn get_file_diff(
+    path: String,
+    id: String,
+    file: String,
+    old_path: Option<String>,
+    full_file: bool,
+) -> Result<FileDiff, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        file_diff(&Repository::discover(&path).map_err(err)?, &id, &file, old_path.as_deref(), full_file)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -190,6 +307,65 @@ mod tests {
         assert!(d.is_merge && d.parents.len() == 2);
 
         assert!(commit_detail(&repo, "not-an-id").is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn file_diff_marks_changes_in_place() {
+        let dir = std::env::temp_dir().join(format!("gc-filediff-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let lines = |n: usize| -> Vec<String> { (1..=n).map(|i| format!("line {i}")).collect() };
+        let write = |name: &str, v: &[String]| fs::write(dir.join(name), v.join("\n") + "\n").unwrap();
+
+        // Root commit: a new file is all additions.
+        write("a.txt", &lines(40));
+        write("old.txt", &lines(30));
+        let c1 = commit_all(&repo, "one", &[]);
+        let d = file_diff(&repo, &c1.to_string(), "a.txt", None, true).unwrap();
+        assert_eq!((d.lines.len(), d.additions, d.deletions), (40, 40, 0));
+        assert!(d.lines.iter().all(|l| l.kind == "add" && l.old_no.is_none()));
+        assert_eq!(d.lines[0].new_no, Some(1));
+
+        // Edit line 2, delete nothing, append at the end, and rename+edit old.txt.
+        let mut v = lines(40);
+        v[1] = "line 2 changed".into();
+        v[38] = "line 39 changed".into();
+        write("a.txt", &v);
+        let mut moved = lines(30);
+        moved[10] = "line 11 changed".into();
+        fs::remove_file(dir.join("old.txt")).unwrap();
+        write("new name.txt", &moved);
+        fs::write(dir.join("bin.dat"), [0u8, 1, 2, 0, 255]).unwrap();
+        let c2 = commit_all(&repo, "two", &[c1]);
+        let id = c2.to_string();
+
+        // Full file: everything is there, changes marked in place with both line numbers.
+        let full = file_diff(&repo, &id, "a.txt", None, true).unwrap();
+        assert_eq!((full.additions, full.deletions, full.lines.len()), (2, 2, 42));
+        assert!(full.lines.iter().all(|l| l.kind != "hunk"));
+        let del = full.lines.iter().find(|l| l.kind == "del" && l.text == "line 2").unwrap();
+        assert_eq!((del.old_no, del.new_no), (Some(2), None));
+        let add = full.lines.iter().find(|l| l.kind == "add" && l.text == "line 2 changed").unwrap();
+        assert_eq!((add.old_no, add.new_no), (None, Some(2)));
+        let last = full.lines.last().unwrap();
+        assert_eq!((last.kind, last.old_no, last.new_no), ("ctx", Some(40), Some(40)));
+
+        // Changes only: two separate hunks, far fewer lines.
+        let part = file_diff(&repo, &id, "a.txt", None, false).unwrap();
+        assert_eq!(part.lines.iter().filter(|l| l.kind == "hunk").count(), 2);
+        assert!(part.lines.len() < full.lines.len());
+        assert_eq!((part.additions, part.deletions), (2, 2));
+
+        // A rename with an edit diffs against the old path; names with special characters work.
+        let r = file_diff(&repo, &id, "new name.txt", Some("old.txt"), true).unwrap();
+        assert_eq!((r.additions, r.deletions), (1, 1));
+
+        // Binary files are flagged, not shown.
+        let b = file_diff(&repo, &id, "bin.dat", None, true).unwrap();
+        assert!(b.binary && b.lines.is_empty());
+
+        assert!(file_diff(&repo, "nope", "a.txt", None, true).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
 }

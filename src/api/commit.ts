@@ -29,3 +29,32 @@ export interface CommitDetail {
 
 export const getCommitDetail = (path: string, id: string) =>
   invoke<CommitDetail>("get_commit_detail", { path, id });
+
+export interface DiffLine {
+  /** "hunk" is a hunk header (changes-only view); "note" is e.g. "No newline at end of file". */
+  kind: "ctx" | "add" | "del" | "hunk" | "note";
+  oldNo: number | null;
+  newNo: number | null;
+  text: string;
+}
+
+export interface FileDiff {
+  lines: DiffLine[];
+  /** Binary or too large to show. */
+  binary: boolean;
+  truncated: boolean;
+  additions: number;
+  deletions: number;
+}
+
+/**
+ * One file of a commit as a line diff against the first parent. `fullFile` returns the whole
+ * file with additions and deletions marked in place; otherwise only the changed hunks.
+ */
+export const getFileDiff = (
+  path: string,
+  id: string,
+  file: string,
+  oldPath: string | null,
+  fullFile: boolean,
+) => invoke<FileDiff>("get_file_diff", { path, id, file, oldPath, fullFile });
