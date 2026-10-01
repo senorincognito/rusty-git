@@ -7,6 +7,7 @@ import {
   type ChangeKind,
   type FileChange,
 } from "./git";
+import ResizablePanel from "./ResizablePanel";
 
 const BADGE: Record<ChangeKind, string> = {
   new: "A",
@@ -124,50 +125,52 @@ export default function Changes({
   const canCommit = !busy && staged.length > 0 && message.trim().length > 0;
 
   return (
-    <aside className="changes">
-      <FileList
-        title="Unstaged"
-        files={unstaged}
-        actionLabel="Stage"
-        onAction={(p) => run(() => stagePaths(path, p))}
-        onActionAll={() =>
-          run(() =>
-            stagePaths(
-              path,
-              unstaged.map((f) => f.path),
-            ),
-          )
-        }
-      />
-      <FileList
-        title="Staged"
-        files={staged}
-        actionLabel="Unstage"
-        onAction={(p) => run(() => unstagePaths(path, p))}
-        onActionAll={() =>
-          run(() =>
-            unstagePaths(
-              path,
-              staged.map((f) => f.path),
-            ),
-          )
-        }
-      />
-      <div className="commitbox">
-        <textarea
-          placeholder="Commit message"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canCommit) commit();
-          }}
-          rows={4}
+    <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
+      <aside className="changes">
+        <FileList
+          title="Unstaged"
+          files={unstaged}
+          actionLabel="Stage"
+          onAction={(p) => run(() => stagePaths(path, p))}
+          onActionAll={() =>
+            run(() =>
+              stagePaths(
+                path,
+                unstaged.map((f) => f.path),
+              ),
+            )
+          }
         />
-        {error && <p className="error">{error}</p>}
-        <button className="primary" disabled={!canCommit} onClick={commit}>
-          Commit{staged.length > 0 ? ` (${staged.length})` : ""}
-        </button>
-      </div>
-    </aside>
+        <FileList
+          title="Staged"
+          files={staged}
+          actionLabel="Unstage"
+          onAction={(p) => run(() => unstagePaths(path, p))}
+          onActionAll={() =>
+            run(() =>
+              unstagePaths(
+                path,
+                staged.map((f) => f.path),
+              ),
+            )
+          }
+        />
+        <div className="commitbox">
+          <textarea
+            placeholder="Commit message"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && canCommit) commit();
+            }}
+            rows={4}
+          />
+          {error && <p className="error">{error}</p>}
+          <button className="primary" disabled={!canCommit} onClick={commit}>
+            Commit{staged.length > 0 ? ` (${staged.length})` : ""}
+          </button>
+        </div>
+      </aside>
+    </ResizablePanel>
   );
 }

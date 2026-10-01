@@ -13,6 +13,7 @@ import {
   type RemoteInfo,
 } from "./git";
 import ContextMenu from "./ContextMenu";
+import ResizablePanel from "./ResizablePanel";
 
 function Section({
   title,
@@ -317,9 +318,11 @@ export default function Sidebar({
   onChanged: () => void;
 }) {
   return (
-    <nav className="sidebar">
-      <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} />
-      <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} />
-    </nav>
+    <ResizablePanel edge="right" storageKey="sidebarWidth" defaultWidth={240}>
+      <nav className="sidebar">
+        <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} />
+        <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} />
+      </nav>
+    </ResizablePanel>
   );
 }
