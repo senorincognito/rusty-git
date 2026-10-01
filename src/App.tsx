@@ -9,6 +9,7 @@ import {
   watchRepo,
   type RepoInfo,
 } from "./git";
+import BranchButton from "./BranchButton";
 import Changes from "./Changes";
 import Graph from "./Graph";
 import Sidebar from "./Sidebar";
@@ -80,6 +81,7 @@ function App() {
             {repo.detached ? "detached @ " : ""}
             {repo.head ?? "(no commits yet)"}
           </span>
+          <BranchButton path={repo.path} onCreated={onCommitted} />
           <SyncBar path={repo.path} refreshKey={graphKey} />
         </header>
         <div className="body">

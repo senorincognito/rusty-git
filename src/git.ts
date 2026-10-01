@@ -109,3 +109,7 @@ export interface RemoteInfo {
 export const getOrigin = (path: string) => invoke<RemoteInfo | null>("get_origin", { path });
 export const addOriginRemote = (path: string, url: string) =>
   invoke<void>("add_origin_remote", { path, url });
+
+/** Creates a branch at the current commit and checks it out. */
+export const createBranch = (path: string, name: string) =>
+  invoke<void>("create_branch", { path, name });

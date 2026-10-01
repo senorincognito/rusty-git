@@ -13,6 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
+            branches::create_branch,
             branches::get_local_branches,
             changes::get_status,
             changes::stage_paths,
