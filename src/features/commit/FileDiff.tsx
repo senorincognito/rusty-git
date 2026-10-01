@@ -1,25 +1,37 @@
-import { useEffect, useRef, useState } from "react";
-import { getFileDiff, type CommitFile, type FileDiff as FileDiffData } from "@/api/commit";
-import FileBadge from "@/components/FileBadge";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getFileDiff, getWorkingDiff, type FileDiff as FileDiffData } from "@/api/diff";
+import FileBadge, { type FileStatus } from "@/components/FileBadge";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { usePersistentState } from "@/hooks/usePersistentState";
 
 const ROW_H = 20;
 const OVERSCAN = 20;
 
+/** Where the diff comes from: a commit, or the staged / unstaged changes of the working tree. */
+export type DiffSource = { kind: "commit"; id: string; shortId: string } | { kind: "staged" } | { kind: "unstaged" };
+
+export interface DiffFile {
+  path: string;
+  oldPath?: string | null;
+  status: FileStatus;
+}
+
 /**
- * The centre view for one file of a commit: its content with the added and removed lines
- * marked in place (or just the changed hunks). Rendered in a virtual list so long files stay fast.
+ * The centre view for one file: its content with the added and removed lines marked in place
+ * (or just the changed hunks). Rendered in a virtual list so long files stay fast.
+ * Working-tree diffs reload when the repo changes or the window regains focus, keeping the scroll position.
  */
 export default function FileDiff({
   path,
-  commit,
+  source,
   file,
+  refreshKey = 0,
   onClose,
 }: {
   path: string;
-  commit: { id: string; shortId: string };
-  file: CommitFile;
+  source: DiffSource;
+  file: DiffFile;
+  refreshKey?: number;
   onClose: () => void;
 }) {
   const [full, setFull] = usePersistentState("diff.fullFile", true, (v): v is boolean => typeof v === "boolean");
@@ -30,16 +42,46 @@ export default function FileDiff({
   const scroller = useRef<HTMLDivElement>(null);
   const start = useLatestRequest();
 
+  const commitId = source.kind === "commit" ? source.id : null;
+  const staged = source.kind === "staged";
+  const isWorking = source.kind !== "commit";
+  const oldPath = file.oldPath ?? null;
+
+  const fetchDiff = useCallback(
+    () =>
+      commitId !== null
+        ? getFileDiff(path, commitId, file.path, oldPath, full)
+        : getWorkingDiff(path, file.path, staged, full),
+    [path, commitId, staged, file.path, oldPath, full],
+  );
+
+  // A different file, source or view mode: start from the top.
   useEffect(() => {
     const isCurrent = start();
     setDiff(null);
     setError(null);
     setScrollTop(0);
     scroller.current?.scrollTo({ top: 0, left: 0 });
-    getFileDiff(path, commit.id, file.path, file.oldPath, full)
+    fetchDiff()
       .then((d) => isCurrent() && setDiff(d))
       .catch((e) => isCurrent() && setError(String(e)));
-  }, [path, commit.id, file.path, file.oldPath, full, start]);
+  }, [fetchDiff, start]);
+
+  // The working tree can change under an open diff (an edit, staging, a commit): refresh quietly.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (!isWorking) return;
+    const refresh = () => {
+      const isCurrent = start();
+      fetchDiff()
+        .then((d) => isCurrent() && setDiff(d))
+        .catch(() => {});
+    };
+    if (firstRun.current) firstRun.current = false;
+    else refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [isWorking, refreshKey, fetchDiff, start]);
 
   useEffect(() => {
     const el = scroller.current;
@@ -55,19 +97,24 @@ export default function FileDiff({
   const last = Math.min(lines.length, Math.ceil((scrollTop + viewH) / ROW_H) + OVERSCAN);
   const maxNo = lines.reduce((m, l) => Math.max(m, l.oldNo ?? 0, l.newNo ?? 0), 0);
   const gutter = `${Math.max(String(maxNo).length, 2) + 1}ch`;
+  const origin = source.kind === "commit" ? source.shortId : source.kind === "staged" ? "staged" : "unstaged";
 
   return (
     <section className="filediff">
       <header className="fd-head">
-        <button className="ghost" onClick={onClose} title="Back to the commit graph">
-          ← Back to graph
+        <button
+          className="ghost"
+          onClick={onClose}
+          title={isWorking ? "Close the diff" : "Back to the commit graph"}
+        >
+          {isWorking ? "← Back" : "← Back to graph"}
         </button>
         <FileBadge kind={file.status} />
         <span className="fd-path" title={file.path}>
           {file.path}
         </span>
         {file.oldPath && <span className="fd-from">renamed from {file.oldPath}</span>}
-        <code className="fd-commit">{commit.shortId}</code>
+        <code className="fd-commit">{origin}</code>
         {diff && !diff.binary && (
           <span className="fd-stats">
             <span className="add">+{diff.additions}</span> <span className="del">-{diff.deletions}</span>
@@ -91,7 +138,11 @@ export default function FileDiff({
         {!diff && !error && <p className="muted pad">Loading…</p>}
         {diff?.binary && <p className="muted pad">Binary or very large file: no preview.</p>}
         {diff && !diff.binary && lines.length === 0 && (
-          <p className="muted pad">No content changes in this file (for example, only its mode changed).</p>
+          <p className="muted pad">
+            {isWorking
+              ? `This file has no ${source.kind} changes (any more).`
+              : "No content changes in this file (for example, only its mode changed)."}
+          </p>
         )}
         {lines.length > 0 && (
           <div className="fd-list" style={{ height: lines.length * ROW_H }}>

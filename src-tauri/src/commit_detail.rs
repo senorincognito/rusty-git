@@ -133,40 +133,23 @@ pub struct FileDiff {
     pub deletions: usize,
 }
 
-/// What one file of a commit changed, against the first parent. With `full_file` the whole file
-/// is returned with the added and removed lines marked in place; otherwise only the changed
-/// hunks with three lines of context.
-fn file_diff(
-    repo: &Repository,
-    id: &str,
-    path: &str,
-    old_path: Option<&str>,
-    full_file: bool,
-) -> Result<FileDiff, String> {
-    let oid = Oid::from_str(id).map_err(err)?;
-    let commit = repo.find_commit(oid).map_err(err)?;
-    let tree = commit.tree().map_err(err)?;
-    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
-
+/// Options shared by every file diff: literal paths (names with [, * or ? are not patterns),
+/// type changes reported, and either the whole file or three lines of context.
+fn diff_options(path: &str, old_path: Option<&str>, full_file: bool) -> DiffOptions {
     let mut opts = DiffOptions::new();
     opts.include_typechange(true)
         .context_lines(if full_file { FULL_FILE_CONTEXT } else { 3 })
         .max_size(MAX_DIFF_BYTES)
-        // Paths are literal here: names with [, * or ? must not be read as patterns.
         .disable_pathspec_match(true)
         .pathspec(path);
     if let Some(old) = old_path {
         opts.pathspec(old);
     }
-    let mut diff = repo
-        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts))
-        .map_err(err)?;
-    if old_path.is_some() {
-        let mut find = DiffFindOptions::new();
-        find.renames(true);
-        diff.find_similar(Some(&mut find)).map_err(err)?;
-    }
+    opts
+}
 
+/// Turns a git diff into the line list the file view draws.
+fn render_diff(diff: &git2::Diff, full_file: bool) -> Result<FileDiff, String> {
     let mut out = FileDiff { lines: Vec::new(), binary: false, truncated: false, additions: 0, deletions: 0 };
     diff.print(DiffFormat::Patch, |delta, _hunk, line| {
         if delta.flags().is_binary() || line.origin() == 'B' {
@@ -206,6 +189,52 @@ fn file_diff(
     Ok(out)
 }
 
+/// A file's uncommitted changes. `staged` compares HEAD with the index (what the next commit
+/// would contain); otherwise the index with the file on disk (what staging would add), where an
+/// untracked file shows up as all additions.
+fn working_diff(repo: &Repository, path: &str, staged: bool, full_file: bool) -> Result<FileDiff, String> {
+    let mut opts = diff_options(path, None, full_file);
+    let index = repo.index().map_err(err)?;
+    let diff = if staged {
+        // On a branch without commits there is no HEAD tree: everything staged counts as added.
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+        repo.diff_tree_to_index(head_tree.as_ref(), Some(&index), Some(&mut opts))
+    } else {
+        opts.include_untracked(true).recurse_untracked_dirs(true).show_untracked_content(true);
+        repo.diff_index_to_workdir(Some(&index), Some(&mut opts))
+    }
+    .map_err(err)?;
+    render_diff(&diff, full_file)
+}
+
+/// What one file of a commit changed, against the first parent. With `full_file` the whole file
+/// is returned with the added and removed lines marked in place; otherwise only the changed
+/// hunks with three lines of context.
+fn file_diff(
+    repo: &Repository,
+    id: &str,
+    path: &str,
+    old_path: Option<&str>,
+    full_file: bool,
+) -> Result<FileDiff, String> {
+    let oid = Oid::from_str(id).map_err(err)?;
+    let commit = repo.find_commit(oid).map_err(err)?;
+    let tree = commit.tree().map_err(err)?;
+    let parent_tree = commit.parent(0).ok().and_then(|p| p.tree().ok());
+
+    let mut opts = diff_options(path, old_path, full_file);
+    let mut diff = repo
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), Some(&mut opts))
+        .map_err(err)?;
+    if old_path.is_some() {
+        let mut find = DiffFindOptions::new();
+        find.renames(true);
+        diff.find_similar(Some(&mut find)).map_err(err)?;
+    }
+
+    render_diff(&diff, full_file)
+}
+
 /// The message, author and changed files of a commit.
 #[tauri::command]
 pub async fn get_commit_detail(path: String, id: String) -> Result<CommitDetail, String> {
@@ -227,6 +256,16 @@ pub async fn get_file_diff(
 ) -> Result<FileDiff, String> {
     tauri::async_runtime::spawn_blocking(move || {
         file_diff(&Repository::discover(&path).map_err(err)?, &id, &file, old_path.as_deref(), full_file)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// A file's uncommitted changes, staged or not, as a line diff for the file view.
+#[tauri::command]
+pub async fn get_working_diff(path: String, file: String, staged: bool, full_file: bool) -> Result<FileDiff, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        working_diff(&Repository::discover(&path).map_err(err)?, &file, staged, full_file)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -366,6 +405,65 @@ mod tests {
         assert!(b.binary && b.lines.is_empty());
 
         assert!(file_diff(&repo, "nope", "a.txt", None, true).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn working_diff_shows_staged_and_unstaged_changes() {
+        let dir = std::env::temp_dir().join(format!("gc-workdiff-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let text = |lines: &[&str]| lines.join("\n") + "\n";
+        let (a, b) = (dir.join("a.txt"), dir.join("b.txt"));
+
+        // A branch without commits: a staged new file is all additions.
+        fs::write(&a, text(&["one", "two", "three"])).unwrap();
+        fs::write(&b, "keep").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("a.txt")).unwrap();
+        index.write().unwrap();
+        let d = working_diff(&repo, "a.txt", true, true).unwrap();
+        assert_eq!((d.additions, d.deletions, d.lines.len()), (3, 0, 3));
+        // ...and an untracked file is all additions in the unstaged view.
+        let d = working_diff(&repo, "b.txt", false, true).unwrap();
+        assert_eq!((d.additions, d.deletions), (1, 0));
+        assert_eq!(d.lines[0].new_no, Some(1));
+        assert_eq!(working_diff(&repo, "b.txt", true, true).unwrap().lines.len(), 0);
+
+        // Commit a.txt, then edit it: the change is unstaged only.
+        commit_all(&repo, "base", &[]);
+        fs::write(&a, text(&["one", "TWO", "three"])).unwrap();
+        let un = working_diff(&repo, "a.txt", false, true).unwrap();
+        assert_eq!((un.additions, un.deletions, un.lines.len()), (1, 1, 4));
+        assert!(un.lines.iter().any(|l| l.kind == "del" && l.text == "two" && l.old_no == Some(2)));
+        assert!(un.lines.iter().any(|l| l.kind == "add" && l.text == "TWO" && l.new_no == Some(2)));
+        assert_eq!(working_diff(&repo, "a.txt", true, true).unwrap().lines.len(), 0);
+
+        // Stage it: now it shows up staged, and nothing is left unstaged.
+        let mut index = repo.index().unwrap();
+        index.add_path(std::path::Path::new("a.txt")).unwrap();
+        index.write().unwrap();
+        let st = working_diff(&repo, "a.txt", true, true).unwrap();
+        assert_eq!((st.additions, st.deletions), (1, 1));
+        assert_eq!(working_diff(&repo, "a.txt", false, true).unwrap().lines.len(), 0);
+
+        // Edit again after staging: both views have their own, different, diff.
+        fs::write(&a, text(&["one", "TWO", "three", "four"])).unwrap();
+        let un = working_diff(&repo, "a.txt", false, true).unwrap();
+        assert_eq!((un.additions, un.deletions), (1, 0));
+        let st = working_diff(&repo, "a.txt", true, true).unwrap();
+        assert_eq!((st.additions, st.deletions), (1, 1));
+
+        // A deleted file is all removals; a missing path just has no changes.
+        fs::remove_file(&b).unwrap();
+        let _ = working_diff(&repo, "b.txt", false, true).unwrap();
+        assert_eq!(working_diff(&repo, "nope.txt", false, true).unwrap().lines.len(), 0);
+
+        // Binary files are flagged, not shown.
+        fs::write(dir.join("bin.dat"), [0u8, 1, 2, 0, 255]).unwrap();
+        let bin = working_diff(&repo, "bin.dat", false, true).unwrap();
+        assert!(bin.binary && bin.lines.is_empty());
+
         let _ = fs::remove_dir_all(&dir);
     }
 }

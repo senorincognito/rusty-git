@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import type { ChangeKind } from "@/api/changes";
 import type { CommitFile } from "@/api/commit";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
@@ -31,11 +32,14 @@ export default function RepoView({
   const [selectedCommit, setSelectedCommit] = useState<{ id: string; shortId: string } | null>(null);
   // A file of the selected commit shown in the centre instead of the graph.
   const [openFile, setOpenFile] = useState<CommitFile | null>(null);
+  // An uncommitted file (staged or not) shown in the centre; chosen from the Changes panel.
+  const [openWorkingFile, setOpenWorkingFile] = useState<{ path: string; staged: boolean; status: ChangeKind } | null>(null);
   const path = repo.path;
 
   const selectCommit = (commit: { id: string; shortId: string }) => {
     setSelectedCommit(commit);
     setOpenFile(null);
+    setOpenWorkingFile(null);
   };
   const closeCommit = () => {
     setSelectedCommit(null);
@@ -95,7 +99,7 @@ export default function RepoView({
         <Sidebar path={path} refreshKey={graphKey} onChanged={reload} />
         <div className="center">
           {/* The graph stays mounted (just hidden) while a file is open, so its scroll position survives. */}
-          <div className={"center-pane" + (openFile ? " hidden" : "")}>
+          <div className={"center-pane" + (openFile || openWorkingFile ? " hidden" : "")}>
             <Graph
               path={path}
               refreshKey={graphKey}
@@ -105,7 +109,21 @@ export default function RepoView({
             />
           </div>
           {openFile && selectedCommit && (
-            <FileDiff path={path} commit={selectedCommit} file={openFile} onClose={() => setOpenFile(null)} />
+            <FileDiff
+              path={path}
+              source={{ kind: "commit", id: selectedCommit.id, shortId: selectedCommit.shortId }}
+              file={openFile}
+              onClose={() => setOpenFile(null)}
+            />
+          )}
+          {openWorkingFile && !openFile && (
+            <FileDiff
+              path={path}
+              source={{ kind: openWorkingFile.staged ? "staged" : "unstaged" }}
+              file={{ path: openWorkingFile.path, status: openWorkingFile.status }}
+              refreshKey={graphKey}
+              onClose={() => setOpenWorkingFile(null)}
+            />
           )}
         </div>
         <ResizablePanel edge="left" storageKey="changesWidth" defaultWidth={340} min={260}>
@@ -135,7 +153,12 @@ export default function RepoView({
             path={path}
             refreshKey={graphKey}
             hidden={renaming !== null || selectedCommit !== null}
-            onCommitted={reload}
+            selected={openWorkingFile && { path: openWorkingFile.path, staged: openWorkingFile.staged }}
+            onSelectFile={setOpenWorkingFile}
+            onCommitted={() => {
+              setOpenWorkingFile(null); // what was committed no longer has a working diff
+              reload();
+            }}
           />
         </ResizablePanel>
       </div>

@@ -53,6 +53,10 @@ and React + TypeScript + Vite. Targets Windows and macOS.
   numbers). A **Full file** switch toggles between the whole file and just the changed hunks
   with three lines of context. Binary and very large files are not previewed, and diffs are
   capped at 20,000 lines. **Back to graph** returns to the commit graph exactly where you left it.
+- Click a file in the staging panel (Unstaged or Staged): the centre area shows its diff the same
+  way. Unstaged compares the index with the file on disk (untracked files show as all added),
+  Staged compares HEAD with the index. It refreshes when you edit, stage or return to the window,
+  and keeps its scroll position.
 - While you have uncommitted changes, a notice at the top of the panel says how many files
   changed in the working directory, with a **View changes** button that closes the commit view
   and returns to the staging panel (your draft commit message is kept). The × does the same.

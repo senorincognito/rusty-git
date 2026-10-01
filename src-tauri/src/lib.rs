@@ -27,6 +27,7 @@ pub fn run() {
             changes::get_status,
             commit_detail::get_commit_detail,
             commit_detail::get_file_diff,
+            commit_detail::get_working_diff,
             changes::stage_paths,
             changes::unstage_paths,
             changes::create_commit,

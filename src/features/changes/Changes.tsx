@@ -18,8 +18,11 @@ function FileList(props: {
   actionLabel: string;
   onAction: (paths: string[]) => void;
   onActionAll: () => void;
+  /** The file whose diff is open in the centre, if it is in this list. */
+  selectedPath: string | null;
+  onSelect: (file: { path: string; kind: ChangeKind }) => void;
 }) {
-  const { title, files, actionLabel, onAction, onActionAll } = props;
+  const { title, files, actionLabel, onAction, onActionAll, selectedPath, onSelect } = props;
   return (
     <section className="filelist">
       <header>
@@ -34,10 +37,30 @@ function FileList(props: {
       </header>
       <ul>
         {files.map((f) => (
-          <li key={f.path} title={f.path}>
+          <li
+            key={f.path}
+            className={"selectable" + (f.path === selectedPath ? " selected" : "")}
+            title={f.path}
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelect(f)}
+            onKeyDown={(e) => {
+              // Only for the row itself, not for keys pressed on the Stage/Unstage button inside it.
+              if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                onSelect(f);
+              }
+            }}
+          >
             <FileBadge kind={f.kind} />
             <span className="fname">{f.path}</span>
-            <button className="ghost" onClick={() => onAction([f.path])}>
+            <button
+              className="ghost"
+              onClick={(e) => {
+                e.stopPropagation(); // staging a file must not also open its diff
+                onAction([f.path]);
+              }}
+            >
               {actionLabel}
             </button>
           </li>
@@ -51,12 +74,17 @@ export default function Changes({
   path,
   refreshKey = 0,
   hidden = false,
+  selected = null,
+  onSelectFile,
   onCommitted,
 }: {
   path: string;
   refreshKey?: number;
   /** Keep mounted (so the draft message survives) but not visible. */
   hidden?: boolean;
+  /** The file whose diff is open in the centre (a file can be listed both staged and unstaged). */
+  selected?: { path: string; staged: boolean } | null;
+  onSelectFile: (file: { path: string; staged: boolean; status: ChangeKind }) => void;
   onCommitted: () => void;
 }) {
   const [changes, setChanges] = useState<FileChange[]>([]);
@@ -158,6 +186,8 @@ export default function Changes({
       <FileList
         title="Unstaged"
         files={unstaged}
+        selectedPath={selected && !selected.staged ? selected.path : null}
+        onSelect={(f) => onSelectFile({ path: f.path, staged: false, status: f.kind })}
         actionLabel="Stage"
         onAction={(p) => run(() => stagePaths(path, p))}
         onActionAll={() =>
@@ -172,6 +202,8 @@ export default function Changes({
       <FileList
         title="Staged"
         files={staged}
+        selectedPath={selected?.staged ? selected.path : null}
+        onSelect={(f) => onSelectFile({ path: f.path, staged: true, status: f.kind })}
         actionLabel="Unstage"
         onAction={(p) => run(() => unstagePaths(path, p))}
         onActionAll={() =>
