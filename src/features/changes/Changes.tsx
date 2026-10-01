@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createCommit,
   getStatus,
@@ -6,8 +6,9 @@ import {
   unstagePaths,
   type ChangeKind,
   type FileChange,
-} from "./git";
-import ResizablePanel from "./ResizablePanel";
+} from "@/api/changes";
+import ResizablePanel from "@/components/ResizablePanel";
+import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 const BADGE: Record<ChangeKind, string> = {
   new: "A",
@@ -66,19 +67,18 @@ export default function Changes({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // Overlapping refreshes can finish out of order; only the latest request may update state.
-  const latest = useRef(0);
+  const start = useLatestRequest();
   const refresh = useCallback(async () => {
-    const id = ++latest.current;
+    const isCurrent = start();
     try {
       const c = await getStatus(path);
-      if (id !== latest.current) return;
+      if (!isCurrent()) return;
       setChanges(c);
       setError(null);
     } catch (e) {
-      if (id === latest.current) setError(String(e));
+      if (isCurrent()) setError(String(e));
     }
-  }, [path]);
+  }, [path, start]);
 
   useEffect(() => {
     setMessage("");

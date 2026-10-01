@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { termResize, termStart, termStop, termWrite } from "./git";
+import { termResize, termStart, termStop, termWrite } from "@/api/terminal";
 
 const MIN_H = 120;
 let nextSessionId = Date.now();

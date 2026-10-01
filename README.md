@@ -87,21 +87,31 @@ cargo test --manifest-path src-tauri/Cargo.toml   # backend tests
 
 ## Layout
 
-| Path | Purpose |
+Backend (`src-tauri/src/`), one module per concern, each with tests where it has logic:
+
+| File | Purpose |
 | --- | --- |
-| `src-tauri/src/repo.rs` | Open repo, recent repos list |
-| `src-tauri/src/graph.rs` | Commit walk, ref labels, lane layout (with tests) |
-| `src-tauri/src/changes.rs` | Status, stage / unstage, create commit (with tests) |
-| `src-tauri/src/watch.rs` | Watches `.git` and emits `repo-changed` for live reload |
-| `src-tauri/src/branches.rs` | Local branches, create / checkout / delete (with tests) |
-| `src-tauri/src/remotes.rs` | Origin info, add origin, delete remote branch (with tests) |
-| `src-tauri/src/sync.rs` | Fetch / pull / push via system git, ahead/behind (with tests) |
-| `src-tauri/src/terminal.rs` | Pseudo-terminal sessions (with tests) |
-| `src/git.ts` | Typed wrappers around the Tauri commands |
-| `src/Graph.tsx` | Virtualised commit graph |
-| `src/Changes.tsx` | Staging and commit panel |
-| `src/Sidebar.tsx` | Local branches and remotes panel |
-| `src/SyncBar.tsx`, `src/BranchButton.tsx` | Title-bar buttons |
-| `src/ContextMenu.tsx` | Reusable context menu (portal popover) |
-| `src/TerminalPanel.tsx` | xterm.js terminal panel |
-| `src/App.tsx` | Welcome screen and repo view |
+| `repo.rs` | Open repo, recent repos list |
+| `graph.rs` | Commit walk, ref labels, lane layout |
+| `changes.rs` | Status, stage / unstage, create commit |
+| `branches.rs` | Local branches, create / checkout / delete |
+| `remotes.rs` | Origin info, add origin, delete remote branch |
+| `sync.rs` | Fetch / pull / push via system git, ahead/behind |
+| `terminal.rs` | Pseudo-terminal sessions |
+| `watch.rs` | Watches `.git` and emits `repo-changed` for live reload |
+
+Frontend (`src/`). `@/` is an alias for `src/` (see `tsconfig.json` and `vite.config.ts`).
+
+| Folder | Purpose |
+| --- | --- |
+| `api/` | Typed wrappers around the Tauri commands, one file per backend module |
+| `features/welcome/` | Start screen: open a repo, recent repos |
+| `features/repo/` | `RepoView`: the screen for an open repository (layout, live reload, shortcuts) |
+| `features/graph/` | Virtualised commit graph |
+| `features/changes/` | Staging and commit panel |
+| `features/sidebar/` | Local branches, remotes, add origin |
+| `features/toolbar/` | Title-bar buttons: fetch / pull / push, new branch |
+| `features/terminal/` | xterm.js terminal panel |
+| `components/` | Generic UI with no git knowledge: context menu, resizable panel, collapsible section |
+| `hooks/` | Shared hooks, e.g. `useLatestRequest` (ignore out-of-order async responses) |
+| `App.tsx` | Switches between the start screen and the repo view |

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { getSyncStatus, gitFetch, gitPull, gitPush, type SyncStatus } from "./git";
+import { useCallback, useEffect, useState } from "react";
+import { getSyncStatus, gitFetch, gitPull, gitPush, type SyncStatus } from "@/api/sync";
+import { useLatestRequest } from "@/hooks/useLatestRequest";
 
 type Op = "fetch" | "pull" | "push";
 type Notice = { kind: "ok" | "error"; text: string };
@@ -14,17 +15,17 @@ export default function SyncBar({ path, refreshKey }: { path: string; refreshKey
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [busy, setBusy] = useState<Op | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const latest = useRef(0);
+  const start = useLatestRequest();
 
   const refresh = useCallback(async () => {
-    const id = ++latest.current;
+    const isCurrent = start();
     try {
       const s = await getSyncStatus(path);
-      if (id === latest.current) setStatus(s);
+      if (isCurrent()) setStatus(s);
     } catch {
-      if (id === latest.current) setStatus(null);
+      if (isCurrent()) setStatus(null);
     }
-  }, [path]);
+  }, [path, start]);
 
   // Reload when the repo changes (a fetch updates remote refs, which the watcher reports).
   useEffect(() => {

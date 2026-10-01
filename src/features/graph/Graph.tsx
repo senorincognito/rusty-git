@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "./git";
+import { getGraph, type Edge, type Graph as GraphData, type GraphRow } from "@/api/graph";
 
 const ROW_H = 28;
 const LANE_W = 16;

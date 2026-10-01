@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createBranch } from "./git";
+import { createBranch } from "@/api/branches";
 
 export default function BranchButton({
   path,
