@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use git2::{BranchType, ObjectType, Oid, Repository, RepositoryState, Status, StatusOptions};
+use git2::{ObjectType, Oid, Repository, RepositoryState, Status, StatusOptions};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -246,6 +246,7 @@ pub async fn get_head_commit(path: String) -> Result<Option<HeadCommit>, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use git2::BranchType;
     use std::fs;
 
     fn find<'a>(list: &'a [FileChange], p: &str) -> &'a FileChange {

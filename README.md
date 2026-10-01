@@ -1,4 +1,4 @@
-# Git Client
+# Rusty Git Client
 
 A simple desktop Git GUI inspired by GitKraken's interface. Built with
 [Tauri 2](https://tauri.app) (Rust backend using [libgit2](https://libgit2.org) via `git2`)

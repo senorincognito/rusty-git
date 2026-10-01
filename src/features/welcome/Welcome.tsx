@@ -35,7 +35,7 @@ export default function Welcome({ onOpen }: { onOpen: (repo: RepoInfo) => void }
 
   return (
     <div className="welcome">
-      <h1>Git Client</h1>
+      <h1>Rusty Git Client</h1>
       <button className="primary" onClick={browse}>
         Open repository…
       </button>
