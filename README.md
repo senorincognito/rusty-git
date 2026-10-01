@@ -1,240 +1,70 @@
 # Rusty Git Client
 
-A simple desktop Git GUI inspired by GitKraken's interface. Built with
-[Tauri 2](https://tauri.app) (Rust backend using [libgit2](https://libgit2.org) via `git2`)
-and React + TypeScript + Vite. Targets Windows and macOS.
+A desktop Git GUI inspired by GitKraken's interface, for Windows and macOS. Built with
+[Tauri 2](https://tauri.app) (a Rust backend using [libgit2](https://libgit2.org) and the system `git`) and
+React + TypeScript + Vite.
 
-## Features
+**What it can do: [FEATURES.md](FEATURES.md).**
 
-### Repositories
-- Open any folder through the native picker. The repo is found by searching upward, so
-  picking a subfolder works.
-- Recent repositories list (up to 20, newest first), stored in the app data directory.
-  Entries whose folder no longer exists are dropped; individual entries can be removed.
-- Shows the current branch, or `detached @ <sha>` for a detached HEAD, and handles
-  freshly initialised repos with no commits.
+## Requirements
 
-### Commit graph
-- All local branches, remote branches and tags, plus a detached HEAD, newest first.
-  Stash and notes refs are left out.
-- Coloured lane layout computed in Rust: branches, merges and joins are drawn as curved
-  lines per row.
-- Ref chips on each commit (current branch highlighted; branches, remotes and tags
-  styled separately).
-- Columns for message, author, date and short hash.
-- Virtualised rendering, with history loaded in pages of 1000 as you scroll.
-- While there are uncommitted changes, a dashed "N file changes in working directory" row sits on top
-  of the graph, joined to the commit you are on. Clicking it shows those changes (the staging panel) in
-  the right panel; it is highlighted whenever no commit is selected. The row updates when you come back
-  to the window after editing files elsewhere.
-- Click a row to select it.
-
-### Creating commits
-- **Changes panel** with Unstaged and Staged file lists and status badges
-  (A added, M modified, D deleted, T type change, ! conflicted).
-- Stage or unstage individual files, or all at once. Deleted files and repos without
-  any commits yet are supported.
-- Commit message box. Commit with the button or `Ctrl`/`Cmd` + `Enter`.
-- **Amend previous commit** switch above the message box: pre-fills the last commit's
-  message and replaces that commit instead of creating a new one. Staged changes are folded
-  in, and a message-only amend works with nothing staged. The author is kept and the
-  committer becomes you, like `git commit --amend`. If the commit is already pushed, a
-  warning says amending it needs a force push.
-- Commit is refused when there is no message, nothing is staged, conflicts are
-  unresolved, or `user.name` / `user.email` aren't configured. Errors are shown in the panel.
-- Finishing an in-progress merge records the merge parents and clears the merge state.
-- The graph, branch label and file lists reload automatically when the repo changes, even
-  from outside the app (terminal, editor, other tools): the `.git` folder is watched for
-  HEAD, index and ref changes. File lists also refresh when
-  the window regains focus, so edits made in your editor show up.
-
-### Commit details
-- Click a commit in the graph: the right panel switches to that commit's message, author, date,
-  parents and the files it changed (added, modified, deleted, renamed with their old path).
-  Merge commits are shown against their first parent.
-- Click a changed file: the centre area shows the file with the commit's changes marked in
-  place (added lines in green with `+`, removed lines in red with `-`, old and new line
-  numbers). A **Full file** switch toggles between the whole file and just the changed hunks
-  with three lines of context. Binary and very large files are not previewed, and diffs are
-  capped at 20,000 lines. **Back to graph** returns to the commit graph exactly where you left it.
-- Click a file in the staging panel (Unstaged or Staged): the centre area shows its diff the same
-  way. Unstaged compares the index with the file on disk (untracked files show as all added),
-  Staged compares HEAD with the index. It refreshes when you edit, stage or return to the window,
-  and keeps its scroll position.
-- Every run of changed lines is a **hunk** with its own heading ("Hunk 2 of 5 · +3 -1"), in all diff views. On
-  the *unstaged* diff of a tracked file each heading has **Stage hunk** (puts just that hunk into the staging
-  area) and **Discard hunk** (removes it from the file after a confirmation; cannot be undone); on the
-  *staged* diff each heading has **Unstage hunk** (takes just that hunk back out of the staging area, the
-  file on disk is untouched; a newly added file is removed from the index, a staged deletion comes back). Line endings,
-  including CRLF files and a missing final newline, are preserved, and a hunk whose file changed since the diff
-  was shown is refused instead of applied to the wrong lines. New (untracked) files and binary files have no
-  hunk buttons: stage the whole file from the list.
-- While you have uncommitted changes, a notice at the top of the panel says how many files
-  changed in the working directory, with a **View changes** button that closes the commit view
-  and returns to the staging panel (your draft commit message is kept). The × does the same.
-
-### Stashes
-- **Stash…** next to the Commit button (disabled when nothing has changed) takes an optional message
-  and moves every uncommitted change (staged, unstaged and untracked files; ignored files stay) into a
-  new stash, leaving the working directory clean.
-- Stashes show up in the commit graph as hollow nodes hanging off the commit they were made on, labelled
-  `stash@{n}`, and in a **Stashes** section in the left panel (newest first). Click one in either place
-  to see its message, base commit and changed files, untracked files included, and open any file's diff.
-- **Pop** (the button at the bottom of the stash's detail panel, or right-click the stash in the
-  Stashes list and choose *Pop stash*) applies the stash to the working directory and removes it from the
-  list, putting back staged changes as staged and restoring untracked files. It needs a clean working
-  directory (the button is disabled otherwise). If the stash would conflict, the pop is undone completely
-  and the stash is kept. Applying without removing is not available yet.
-- **Delete stash** (right-click the stash in the Stashes list) removes it without applying it, after a confirmation.
-  It works with uncommitted changes in the working directory; the stash's changes are lost.
-
-### Commit graph context menu
-- Right-click a commit: **Rename commit** opens an editor in the right panel with the full
-  message and **Update** / **Cancel** buttons (Esc cancels, Ctrl+Enter updates). Only
-  commits on the current branch can be renamed.
-- Update rewrites the commit's message and rebuilds every later commit on the branch on top
-  of it (same files, authors and dates, new ids), then moves the branch. Files and the index
-  are untouched, so there can be no conflicts. Other branches keep their old history. The
-  panel warns when later commits are rewritten and when the commit is already pushed (a
-  force push is then needed).
-
-### Dropping a commit
-- Right-click a commit on the current branch and choose **Drop commit** (greyed out, with a tooltip, on other
-  branches' commits, stashes and the first commit). After a confirmation the commit disappears from the branch
-  together with its changes in the working directory. Commits after it are re-created on top of its parent
-  (new ids, same changes, authors and messages), like a drop in an interactive rebase.
-- It is all-or-nothing: the replay happens in memory, and if a later commit depends on the dropped one and would
-  conflict, nothing is changed and the message names the commit and files. It needs a clean working directory,
-  a commit on the branch's own line with no merge commit after it, and a checked-out branch (not a detached
-  HEAD). The confirmation spells out how many commits are rewritten, warns about merges and already-pushed
-  history (a force push is then needed) and notes that other branches and tags keep the old history. The old
-  commits stay recoverable through `git reflog` for a while.
-
-### Resetting to a commit
-- Right-click any commit, point at **Reset to this commit** (a menu group: its submenu opens to the right on
-  hover, click or the right arrow key) and choose **Soft**, **Mixed** or **Hard** (the commits of other lines of
-  history work too; stashes don't). Each asks first, spelling out what happens:
-  - **soft** moves only the branch; the staging area and your files are untouched, so the removed commits' changes
-    show up as staged changes;
-  - **mixed** also resets the staging area; your files are untouched, so those changes (and anything that was
-    staged) become unstaged, new files untracked;
-  - **hard** also resets your files: uncommitted changes are lost for good and the removed commits' changes leave
-    your files (untracked files are left alone).
-- The confirmation lists the commits that leave the branch (or how far it moves forward), says how many uncommitted
-  file changes a hard reset would throw away, warns when removed commits are already pushed (a force push is then
-  needed), and mentions the reflog. It works on a detached HEAD too.
-
-### Branches and remotes (left panel)
-- **Local branches**: alphabetical list with the current branch highlighted and `↑n` / `↓n`
-  when ahead of or behind the upstream. Double-click a branch to check it out (safe
-  checkout: refused if uncommitted changes would be overwritten).
-- **Branch** button: create a branch from the current commit and check it out; the name is
-  validated and uncommitted changes carry over.
-  The **⋯** button in the Local branches headline has *New branch…*, which opens the same name form inline.
-- **Remotes**: every remote of the repository with its URL and remote branches. The **⋯** button in the section's headline opens a menu with
-  *Add remote…* (a name and URL form; shown right away when there is none yet) and, with several remotes, a *Target
-  remote* group to pick the target. Right-click a remote's header for *Set as target*, *Edit URL* (Enter
-  saves, Esc cancels; the remote branches stay until the next fetch) and *Remove remote*. The **target** remote (marked
-  when there are several; the one you chose, else `origin`, else the first) is where **Push** publishes a branch that has no upstream yet;
-  branches that already track something keep pushing and pulling there. Removing a remote asks first and only changes
-  this repository's settings (its remote-tracking branches go, local branches that tracked it lose their upstream; nothing on the server is touched). A yellow ⚠ beside a remote's name means the last fetch
-  failed (hover it for git's message); it disappears after the next successful fetch, pull or background fetch.
-- **Context menus** on branches: *Rename branch* and *Delete branch* (both disabled for the
-  checked-out branch), and *Rename remote branch* and *Delete remote branch* (both disabled for
-  the branch the checked-out branch tracks). Renaming edits the name inline (Enter confirms,
-  Esc cancels). A remote rename asks first, pushes the new name and deletes the old one in one
-  atomic push (refused if somebody pushed to it since your last fetch), and points local
-  branches that tracked it at the new name. Deleting a branch also asks first, and warns when
-  commits would exist nowhere else; remote deletion runs `git push origin --delete`.
-
-### Fetch, pull and push
-- Title-bar buttons run the system `git`, so your credential helper and SSH setup apply.
-- Fetch updates all remotes (with prune). Pull fast-forwards, so it never creates a surprise
-  merge. When the branches have diverged, a dialog lists the commits on each side and offers
-  **Merge** (the default: keeps every commit, adds a merge commit) or **Rebase** (replays your
-  commits on top of the upstream, giving them new ids). Uncommitted changes are set aside and
-  restored. If there are conflicts, the pull is cancelled with the file names and the repository is
-  left exactly as it was (resolve in the terminal for now). Push publishes a new branch to `origin` and sets its upstream.
-- **Auto-fetch** (on by default, every 3 minutes): fetches in the background while the window
-  is focused, and right away when you come back to a stale repo. It never overlaps another
-  git operation, stays silent (a small spinner shows while it runs), backs off when the
-  remote is unreachable, and pauses instead of retrying when credentials are needed. Switch it
-  off or pick 1 / 3 / 5 / 10 minutes from the ▾ next to Fetch (or right-click Fetch).
-- **Pull options**: click the small ▾ beside Pull (or right-click it) to pull with an explicit
-  strategy, **Pull (merge)** or **Pull (rebase)**, without the diverged-branches dialog.
-- **Force push**: right-click the Push button, or click the small ▾ beside it. It asks for
-  confirmation first (and says how many remote commits will be discarded), then runs
-  `git push --force-with-lease`, which is refused if the remote moved since your last fetch.
-  Use it after amending or renaming a commit that was already pushed.
-- Buttons show `↓n` / `↑n` counts and are disabled with a tooltip when they can't work.
-
-### Terminal
-- Toggle a real terminal (PowerShell on Windows, your login shell on macOS) in the
-  repository folder with the **>_ Terminal** button or the Ctrl + Backquote shortcut. Resizable, keeps its
-  session while hidden, restarts when you switch repositories.
-- Anything you run there (commits, checkouts, ...) shows up in the UI through live reload.
-
-### Keyboard shortcuts
-| Key | Action |
+| Tool | Notes |
 | --- | --- |
-| `Esc` | Close the diff in the centre (same as **Back**); also closes menus and dialogs and cancels inline editors |
-| `Ctrl` + `` ` `` | Show or hide the terminal |
-| `Ctrl`/`Cmd` + `Enter` | Commit (staging panel) or Update (rename dialog) |
-| `Enter` / `Space` | Open the focused file row; `Enter` confirms an inline branch rename |
-| `←` / `→` on a panel's resize handle | Resize it (hold `Shift` for bigger steps) |
+| [Node.js](https://nodejs.org) | 22 LTS (what CI uses) with npm |
+| [Rust](https://rustup.rs) | stable, installed with rustup. On Windows use the MSVC toolchain |
+| [Git](https://git-scm.com) | on your `PATH`. The app runs the system `git` for fetch, pull and push, and the backend tests need it |
 
-Esc leaves text fields and the terminal alone, so it never interferes with typing.
+Platform extras:
 
-## Not yet implemented
+- **Windows**: the Visual Studio C++ Build Tools ("Desktop development with C++"). The WebView2 runtime ships with
+  Windows 11; Windows 10 may need it from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/).
+- **macOS**: the Xcode Command Line Tools (`xcode-select --install`).
 
-- Diff view and commit detail panel
-- Tags in the sidebar, remote branch checkout
-- Applying a stash without removing it
-- Merge / rebase, rename branch, push or pull from the context menu
-- Discard changes
-- Renames are shown as a delete plus an add
+Restart your terminal (or editor) after installing Rust so `cargo` is on the `PATH`.
 
-## Development
-
-Requirements: Node.js, Rust (stable, MSVC toolchain on Windows), and on Windows the
-Visual Studio C++ Build Tools. WebView2 ships with Windows 11.
-
-Styles are written in SCSS and compiled by Vite (hot reload in `tauri dev`, part of `npm run build`), so there
-is no separate CSS build step.
+## Run it locally
 
 ```sh
 npm install
-npm run tauri dev      # run the app with hot reload
-npm run build          # typecheck, compile the SCSS and build the frontend
-cargo test --manifest-path src-tauri/Cargo.toml   # backend tests
+npm run tauri dev
 ```
 
-## Building a standalone app
+`npm run tauri dev` starts the Vite dev server and compiles the Rust backend, then opens the app window. Frontend
+changes reload instantly; a change to the Rust code restarts the app. The first start compiles every Rust
+dependency and takes a few minutes.
 
-This builds a normal desktop app you can install and run without the dev tools. It is a local build:
-nothing is signed, published or auto-updated.
+Don't use `npm run dev` for this: it only starts the Vite web server on port 1420 and opens no window, and the
+page can't work in a browser because it talks to the Rust backend.
 
-**Prerequisites** (the same as for development): [Node.js](https://nodejs.org), [Rust](https://rustup.rs)
-with the MSVC toolchain, and on Windows the Visual Studio C++ Build Tools. The first build also downloads
-the WiX and NSIS installer tools, so it needs an internet connection.
+Checks you can run any time (the CI pipeline runs the same ones):
 
-**Windows.** Double-click `scripts\build-release.cmd`, or run it from a terminal:
+```sh
+npm run lint                                                   # ESLint
+npm run build                                                  # typecheck + bundle the frontend (and compile the SCSS)
+cargo test --lib --manifest-path src-tauri/Cargo.toml          # backend tests
+cargo fmt --manifest-path src-tauri/Cargo.toml --check         # formatting
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+```
+
+## Build it
+
+Builds a standalone app and installers for the OS you are on. A Mac is needed for the macOS build.
+
+**Windows**: double-click `scripts\build-release.cmd`, or from a terminal:
 
 ```bat
 scripts\build-release.cmd
-scripts\build-release.cmd -Bundles none -Open
 ```
 
-**macOS / Linux / Git Bash.** Run the shell script (it is marked executable):
+**macOS / Linux / Git Bash**:
 
 ```sh
 scripts/build-release.sh
-scripts/build-release.sh --no-bundle --open
 ```
 
-Both scripts check the prerequisites, run `npm ci` if `node_modules` is missing, build, and print where
-the results are. The first build compiles every dependency and takes a few minutes; later ones take about
-a minute and a half. If you prefer to do it by hand: `npm ci` then `npm run tauri build`.
+Both scripts check the requirements, run `npm ci` if `node_modules` is missing, build, and print where the results
+are. The first build takes a few minutes, later ones about a minute and a half. By hand it is
+`npm ci` then `npm run tauri build`.
 
 | Option (Windows / shell) | Effect |
 | --- | --- |
@@ -243,70 +73,19 @@ a minute and a half. If you prefer to do it by hand: `npm ci` then `npm run taur
 | `-SkipInstall` / `--skip-install` | Don't run `npm ci` when `node_modules` is missing |
 | `-Open` / `--open` | Open the output folder when done |
 
-**Results** are in `src-tauri/target/release/`:
+Results are in `src-tauri/target/release/`: `rusty-git-client.exe` (runs standalone), `bundle/nsis/*-setup.exe` (setup
+installer) and `bundle/msi/*.msi`. On macOS they are an `.app` and a `.dmg` under `bundle/`.
 
-| File | What it is |
-| --- | --- |
-| `rusty-git-client.exe` | The app itself. Runs standalone; needs the WebView2 runtime (included in Windows 11) |
-| `bundle/nsis/Rusty Git Client_<version>_x64-setup.exe` | Setup installer (Start menu entry, uninstaller; installs per user) |
-| `bundle/msi/Rusty Git Client_<version>_x64_en-US.msi` | MSI installer |
+Good to know:
 
-On macOS the results are an `.app` and a `.dmg` under `bundle/`, and a Mac is required to build them.
+- The builds are **unsigned**: Windows SmartScreen shows "unknown publisher" (*More info*, then *Run anyway*) and macOS
+  needs right-click, then Open, the first time.
+- The icons are still the Tauri defaults; replace them with `npx tauri icon <your-logo.png>`.
+- The version is set in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; change all three together.
 
-**Good to know**
-- The app runs the system `git` for fetch, pull, push and similar, so **Git must be installed and on the
-  PATH** on any machine that uses it. The installers cannot include it.
-- The builds are **unsigned**. Windows SmartScreen shows an "unknown publisher" warning the first time:
-  choose *More info*, then *Run anyway*. (macOS Gatekeeper warns in the same way.)
-- The icons are still the Tauri defaults. Replace them with `npx tauri icon <your-logo.png>`.
-- The version is set in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`; change
-  all three together before building a new release.
-- The build scripts are tested on Windows. The shell script has not been run on macOS or Linux yet.
+### Releases from CI
 
-## Continuous integration
-
-`.github/workflows/ci.yml` runs lint and tests on every push to `main` or a `release/*` branch, every pull request and on demand:
-
-1. **Frontend**: `npm run lint` (ESLint), `npm run build` (typecheck + bundle + SCSS).
-2. **Rust**: `cargo fmt --check`, `cargo clippy -D warnings`, and the backend tests on Linux, Windows and macOS.
-3. **Build**, only on a branch named `release/<version>` and only when all of that passes: a Windows installer (NSIS `.exe` and `.msi`) and a universal macOS `.dmg`
-   (Apple Silicon and Intel), kept as workflow artifacts.
-4. **Release**: that same branch also creates a *draft* GitHub release tagged `v<version>` with the installers attached;
-   review it, then publish. To release 0.2.0: bump the version (`package.json`, `Cargo.toml`, `tauri.conf.json`), then push a
-   branch `release/0.2.0`. The version in the branch name must equal the one in `package.json`, otherwise the build stops.
-
-The installers are unsigned (see above): Windows shows SmartScreen's "unknown publisher" and macOS needs right-click,
-Open the first time. Run the same checks locally with `npm run lint`, `npm run build`,
-`cargo fmt --manifest-path src-tauri/Cargo.toml` and `cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets`.
-
-## Layout
-
-Backend (`src-tauri/src/`), one module per concern, each with tests where it has logic:
-
-| File | Purpose |
-| --- | --- |
-| `repo.rs` | Open repo, recent repos list |
-| `graph.rs` | Commit walk, ref labels, lane layout |
-| `changes.rs` | Status, stage / unstage, create commit |
-| `branches.rs` | Local branches, create / checkout / delete |
-| `remotes.rs` | Remotes: list, add, change URL, remove, target remote; delete and rename remote branches |
-| `sync.rs` | Fetch / pull / push via system git, ahead/behind |
-| `terminal.rs` | Pseudo-terminal sessions |
-| `watch.rs` | Watches `.git` and emits `repo-changed` for live reload |
-
-Frontend (`src/`). `@/` is an alias for `src/` (see `tsconfig.json` and `vite.config.ts`).
-
-| Folder | Purpose |
-| --- | --- |
-| `api/` | Typed wrappers around the Tauri commands, one file per backend module |
-| `features/welcome/` | Start screen: open a repo, recent repos |
-| `features/repo/` | `RepoView`: the screen for an open repository (layout, live reload, shortcuts) |
-| `features/graph/` | Virtualised commit graph |
-| `features/changes/` | Staging and commit panel |
-| `features/sidebar/` | Local branches, remotes (add, edit, remove), stashes |
-| `features/toolbar/` | Title-bar buttons: fetch / pull / push, new branch |
-| `features/terminal/` | xterm.js terminal panel |
-| `components/` | Generic UI with no git knowledge: context menu, resizable panel, collapsible section |
-| `hooks/` | Shared hooks, e.g. `useLatestRequest` (ignore out-of-order async responses) |
-| `styles/` | Global SCSS: design tokens, mixins, base styles and shared widgets. Each component's own styles are a `.scss` file next to it |
-| `App.tsx` | Switches between the start screen and the repo view |
+`.github/workflows/ci.yml` runs lint and tests on every push to `main` or a `release/*` branch and on every pull
+request. Pushing a branch named `release/<version>` (for example `release/0.2.0`, matching the version in
+`package.json`) also builds the Windows installers and a universal macOS `.dmg` and creates a draft GitHub release
+`v<version>` with them attached.

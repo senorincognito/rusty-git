@@ -2,7 +2,8 @@
 
 Guidance for working on **Rusty Git Client**: a desktop Git GUI in the spirit of GitKraken, built with
 Tauri 2 (Rust backend, `git2`/libgit2 plus the system `git`) and React + TypeScript + Vite.
-Targets Windows and macOS. `README.md` lists user-facing features; this file is for contributors.
+Targets Windows and macOS. `FEATURES.md` lists the user-facing features (update it with every feature) and `README.md` covers requirements, running
+and building; this file is for contributors.
 
 **Keep this file current.** The author has given standing permission to update it without asking: when work
 adds a module or a rule, settles a product decision, or uncovers a quirk (library, git, Windows, tooling),
@@ -109,7 +110,7 @@ app rename so users keep their data. Don't change it casually.
   (`input`/`textarea`/`select`/contenteditable; xterm's hidden textarea counts) and must do nothing while a
   `.ctxmenu` or `.modal-backdrop` is open, because those handle their own Escape. `FileDiff` is the model.
   Existing shortcuts: Esc (close diff / menus / dialogs / editors), Ctrl+\` terminal (`RepoView`),
-  Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles. Keep the README table in sync.
+  Ctrl/Cmd+Enter commit and rename-update, arrow keys on resize handles. Keep the shortcuts table in `FEATURES.md` in sync.
 - Match the surrounding comment density: short comments that explain *why*, none restating the code.
 
 ## Product decisions already made (keep consistent)
