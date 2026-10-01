@@ -106,6 +106,9 @@ app rename so users keep their data. Don't change it casually.
   the submenu; outside-click detection is `closest(".ctxmenu")` so it covers every panel). Split buttons (Fetch/Pull/Push) use `withMenu` in `SyncBar`: arrow click or
   right-click opens it; the arrow's `onMouseDown` stops propagation so the outside-click handler doesn't
   fight the toggle. Dialogs use `Modal`; simple yes/no uses `confirmDialog` (native, Tauri dialog plugin).
+- **Right-click**: `App` suppresses the webview's native context menu everywhere except text fields (input/textarea,
+  which keep cut/copy/paste). A component that wants a right-click action handles `onContextMenu` and calls
+  `preventDefault()` itself; anything without a handler simply does nothing.
 - **Destructive actions** confirm first, say what is lost, and prefer safe variants
   (`--force-with-lease`, safe checkout, abort on conflict). Disabled menu items carry a tooltip saying why.
 - **Tests** build real repos in temp dirs (git2 and, for network behaviour, the system git with local bare
