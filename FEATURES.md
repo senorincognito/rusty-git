@@ -207,6 +207,10 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   commits on top of the upstream, giving them new ids). Uncommitted changes are set aside and
   restored. If there are conflicts, the pull is cancelled with the file names and the repository is
   left exactly as it was (resolve in the terminal for now). Push publishes a new branch to `origin` and sets its upstream.
+- **Sign-in prompt** (macOS): when a fetch, pull or push needs a username, password, token or SSH passphrase and no credential
+  helper supplies it, a dialog asks for it (for GitHub and similar over HTTPS enter a personal access token as the password).
+  Cancel aborts the operation. If Git has a credential helper (e.g. the macOS keychain) it stores the login afterwards. Windows
+  uses Git Credential Manager's own window. Auto-fetch never asks; it pauses on missing credentials as before.
 - **Auto-fetch** (on by default, every 3 minutes): fetches in the background while the window
   is focused, and right away when you come back to a stale repo. It never overlaps another
   git operation, stays silent (a small spinner shows while it runs), backs off when the

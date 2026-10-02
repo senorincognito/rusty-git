@@ -60,6 +60,7 @@ the module path to be visible from the crate root.
 | `sidebar/remotes.rs` | `features/sidebar` | `get_remotes` (every remote with branches, `isTarget`, tracking count), `add_remote_cmd`, `set_remote_url_cmd`, `delete_remote_cmd`, `set_target_remote`; delete/rename remote branches take a `remote` argument |
 | `sidebar/stash.rs` | `features/sidebar`, `features/changes` | `get_stashes`, `create_stash` (stashes everything incl. untracked), `stash_paths_cmd` (selected files, via system git), `pop_stash_cmd`, `drop_stash_cmd`; helpers `stash_index_of`, `untracked_tree` |
 | `toolbar/sync.rs` | `features/toolbar` | fetch / pull / push / force push / auto-fetch / diverged pull; `run_git`, `run_git_with` |
+| `auth/mod.rs` | `features/auth` | credential prompts: `GIT_ASKPASS`/`SSH_ASKPASS` script, loopback socket, `credentials-request` event, `answer_credentials` |
 | `terminal/mod.rs` | `features/terminal` | PTY sessions (`portable-pty`) feeding the xterm.js panel |
 
 Modules reach each other by full path (`crate::toolbar::sync::run_git`, `crate::changes::status_of`,
@@ -153,6 +154,13 @@ app rename so users keep their data. Don't change it casually.
   conflict UI yet. `pull.rebase` is intentionally not consulted.
 - **Force push** is `git push --force-with-lease`, behind a confirmation that counts the remote commits
   that will be discarded. Only offered when the branch has an upstream.
+- **Credential prompts** (`auth/mod.rs`, `features/auth/CredentialPrompt`, mounted in `App`): `run_git` (manual operations) sets
+  `GIT_ASKPASS`/`SSH_ASKPASS` (+`SSH_ASKPASS_REQUIRE=force`) to a temp-dir script (not the app data dir: git splits the command at the
+  space in `Application Support`) that runs this exe as `--askpass <prompt>` (handled first thing in `run()`); it asks the app over a
+  token-checked loopback socket, the UI answers via `answer_credentials`. `run_git_with` (auto-fetch, timeouts) never prompts, so
+  background work still fails fast with `GIT_TERMINAL_PROMPT=0`. Unix only (Windows has Git Credential Manager). The round trip is
+  unit-tested; the unix script and a real macOS push are untested here. Credentials are not stored by the app: git's credential
+  helper does that if one is configured.
 - **Fetch failures** show as a ⚠ beside "origin" in the sidebar (tooltip = git's message). `SyncBar` combines its last manual
   fetch error with `useAutoFetch().error` and reports it up via `onFetchError` to `RepoView`, which passes `fetchError` to
   `Sidebar` > `Remotes`. Any successful fetch, pull or background fetch clears it; a failed push does not set it.

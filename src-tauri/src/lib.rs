@@ -1,3 +1,4 @@
+mod auth;
 mod changes;
 mod commit;
 mod graph;
@@ -9,12 +10,21 @@ mod toolbar;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Git started us as its askpass helper (see auth): answer the prompt and exit before any UI exists.
+    if std::env::args().nth(1).as_deref() == Some("--askpass") {
+        std::process::exit(auth::askpass_main());
+    }
     tauri::Builder::default()
         .manage(repo::watch::RepoWatcher::default())
         .manage(terminal::Terminal::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            auth::start(app.handle().clone());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            auth::answer_credentials,
             sidebar::branches::checkout_local_branch,
             sidebar::branches::checkout_remote_branch,
             sidebar::branches::count_unmerged_commits,

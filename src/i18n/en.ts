@@ -12,6 +12,14 @@ export const en = {
     loading: "Loading…",
   },
 
+  auth: {
+    title: "Sign in",
+    answerLabel: "Answer",
+    tokenHint:
+      "For GitHub, GitLab and similar hosts over HTTPS, use a personal access token here, not your account password.",
+    submit: "Continue",
+  },
+
   welcome: {
     title: "Rusty Git Client",
     open: "Open repository…",

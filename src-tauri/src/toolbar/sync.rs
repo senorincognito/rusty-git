@@ -46,13 +46,19 @@ fn sync_status(repo: &Repository) -> Result<SyncStatus, String> {
     Ok(status)
 }
 
-/// Runs the system `git` so the user's credential helpers, SSH agent and config all apply.
+/// Runs the system `git` so the user's credential helpers, SSH agent and config all apply. When git needs a
+/// password, token or passphrase the user is asked in a dialog (see `auth`).
 pub(crate) fn run_git(path: &str, args: &[&str]) -> Result<String, String> {
-    run_git_with(path, args, None)
+    run_git_inner(path, args, None, true)
 }
 
-/// Like [`run_git`], but kills git and fails if it takes longer than `timeout`.
+/// Like [`run_git`], but kills git and fails if it takes longer than `timeout`, and never asks the user for
+/// credentials (it serves background work such as auto-fetch).
 pub(crate) fn run_git_with(path: &str, args: &[&str], timeout: Option<Duration>) -> Result<String, String> {
+    run_git_inner(path, args, timeout, false)
+}
+
+fn run_git_inner(path: &str, args: &[&str], timeout: Option<Duration>, may_ask: bool) -> Result<String, String> {
     let mut cmd = Command::new("git");
     cmd.arg("-C")
         .arg(path)
@@ -62,6 +68,9 @@ pub(crate) fn run_git_with(path: &str, args: &[&str], timeout: Option<Duration>)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if may_ask {
+        crate::auth::apply_env(&mut cmd);
+    }
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
