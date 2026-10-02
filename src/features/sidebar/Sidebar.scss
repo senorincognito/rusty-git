@@ -78,6 +78,12 @@
     &.ctx {
       background: $press-tint;
     }
+
+    // A folder (a branch-name prefix): click to open or close.
+    &.folder {
+      cursor: pointer;
+      color: $muted;
+    }
   }
 }
 

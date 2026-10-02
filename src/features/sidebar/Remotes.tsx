@@ -16,6 +16,7 @@ import { useLatestRequest } from "@/hooks/useLatestRequest";
 import { t } from "@/i18n";
 import AddRemote from "./AddRemote";
 import BranchNameInput from "./BranchNameInput";
+import { buildRows, FolderRow, leafIndent, useClosedFolders } from "./branchTree";
 import { matchesFilter } from "./filter";
 
 export default function Remotes({
@@ -161,6 +162,7 @@ export default function Remotes({
       branches: matchesFilter(filter, r.name) ? r.branches : r.branches.filter((b) => matchesFilter(filter, `${r.name}/${b}`)),
     }))
     .filter(({ r, branches }) => filter.trim() === "" || branches.length > 0 || matchesFilter(filter, r.name));
+  const folders = useClosedFolders();
   const several = (remotes?.length ?? 0) > 1;
   const headRemote = headMenu ? remotes?.find((r) => r.name === headMenu.remote) : undefined;
   const branchRemote = menu ? remotes?.find((r) => r.name === menu.remote) : undefined;
@@ -228,9 +230,13 @@ export default function Remotes({
           </div>
           {branches.length === 0 && r.branches.length === 0 && <p className="muted side-msg">{t.remotes.noBranches}</p>}
           <ul className="branchlist">
-            {branches.map((b) => (
+            {buildRows(branches, (x) => x, folders.closed, filter.trim() !== "", r.name + ":").map((row) => {
+              if (row.kind === "folder") return <FolderRow key={"f:" + row.key} row={row} onToggle={folders.toggle} />;
+              const b = row.item;
+              return (
               <li
                 key={b}
+                style={leafIndent(row.depth)}
                 className={menu?.remote === r.name && menu.branch === b ? "ctx" : ""}
                 title={`${r.name}/${b}`}
                 onContextMenu={(e) => {
@@ -245,10 +251,11 @@ export default function Remotes({
                     onCancel={() => setEditing(null)}
                   />
                 ) : (
-                  <span className="bname">{b}</span>
+                  <span className="bname">{row.label}</span>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         </div>
       ))}

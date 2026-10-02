@@ -14,6 +14,7 @@ import { useLatestRequest } from "@/hooks/useLatestRequest";
 import NewBranchForm from "@/features/toolbar/NewBranchForm";
 import { t } from "@/i18n";
 import BranchNameInput from "./BranchNameInput";
+import { buildRows, FolderRow, leafIndent, useClosedFolders } from "./branchTree";
 import { matchesFilter } from "./filter";
 
 export default function LocalBranches({
@@ -60,6 +61,8 @@ export default function LocalBranches({
   };
 
   const shown = branches?.filter((b) => matchesFilter(filter, b.name));
+  const folders = useClosedFolders();
+  const rows = shown && buildRows(shown, (b) => b.name, folders.closed, filter.trim() !== "");
   const [menu, setMenu] = useState<{ x: number; y: number; branch: BranchInfo } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   // The "⋯" menu in the section's headline, and the inline new-branch form it opens.
@@ -123,9 +126,13 @@ export default function LocalBranches({
       {branches?.length === 0 && <p className="muted side-msg">{t.localBranches.none}</p>}
       {branches && branches.length > 0 && shown?.length === 0 && <p className="muted side-msg">{t.localBranches.noMatch}</p>}
       <ul className="branchlist">
-        {shown?.map((b) => (
+        {rows?.map((row) => {
+          if (row.kind === "folder") return <FolderRow key={"f:" + row.key} row={row} onToggle={folders.toggle} />;
+          const b = row.item;
+          return (
           <li
             key={b.name}
+            style={leafIndent(row.depth)}
             className={(b.isHead ? "current" : "") + (menu?.branch.name === b.name ? " ctx" : "")}
             title={b.isHead ? t.localBranches.current(b.name) : t.localBranches.checkoutHint(b.name)}
             onDoubleClick={() => editing === null && switchTo(b)}
@@ -141,12 +148,13 @@ export default function LocalBranches({
                 onCancel={() => setEditing(null)}
               />
             ) : (
-              <span className="bname">{b.name}</span>
+              <span className="bname">{row.label}</span>
             )}
             {b.behind > 0 && <span className="sync">↓{b.behind}</span>}
             {b.ahead > 0 && <span className="sync">↑{b.ahead}</span>}
           </li>
-        ))}
+          );
+        })}
       </ul>
       {sectionMenu && (
         <ContextMenu

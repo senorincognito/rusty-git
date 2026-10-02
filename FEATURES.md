@@ -178,6 +178,8 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 - **Long lists**: the three sections share the panel's height, and a long list scrolls inside its own section, so the Local
   branches, Remotes and Stashes headlines stay visible whatever the number of branches (collapse a section to give the
   others the room).
+- **Folders**: branch names with a `/` are grouped like folders, in local branches and under each remote (`feature/login`
+  is `login` inside a `feature` folder, with a branch count). Click a folder to close or open it; a filter opens them all.
 - **Filter** (the field at the very top of the left panel): type part of a name to narrow the local branches, remote
   branches (matched as `origin/name`, or all of a remote's branches when the remote's name matches) and stashes (by message
   or `stash@{n}`) at once. Several words must all match, case does not matter; Esc or the × clears it.

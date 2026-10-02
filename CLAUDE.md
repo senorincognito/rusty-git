@@ -110,6 +110,8 @@ app rename so users keep their data. Don't change it casually.
   the same `NewBranchForm` the toolbar's Branch button uses, inline) and Remotes. Keep branch creation in that one form.
 - **Sidebar layout**: `.sidebar` does not scroll itself; each open `Section` is a shrinkable flex item (min height 96px) whose
   `.sidebox-body` scrolls, so all headlines stay visible. Keep new sidebar sections inside `Section`.
+- **Branch folders**: `sidebar/branchTree.tsx` (`buildRows`, `useClosedFolders`, `FolderRow`) turns names into folder/branch rows
+  (folders first, nested by `/`, closed state not persisted, all open while a filter is active); local and remote lists both use it.
 - **Sidebar filter**: `Sidebar` owns one text field (not persisted) and passes `filter` to `LocalBranches`, `Remotes` and `Stashes`,
   which list only matches via `matchesFilter` (`sidebar/filter.ts`: all words, case-insensitive). New sidebar lists should take it too.
 - **Popovers/menus** use `ContextMenu` (portal to `<body>`; supports `checked`, `separatorBefore`,

@@ -71,6 +71,7 @@ export const en = {
     actions: "Branch actions",
     none: "No branches yet.",
     noMatch: "No branch matches the filter.",
+    folderCount: (n: number) => plural(n, "branch", "branches"),
     current: (name: string) => `${name} (current)`,
     checkoutHint: (name: string) => `Double-click to check out ${name}`,
     newBranch: "New branch…",
