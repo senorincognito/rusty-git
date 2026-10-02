@@ -118,6 +118,9 @@ export const en = {
           ? ["", `${plural(trackingBranches, "local branch", "local branches")} track${trackingBranches === 1 ? "s" : ""} it and will no longer have an upstream.`]
           : []),
       ].join("\n"),
+    checkout: "Check out",
+    checkoutHint: (full: string) => `Double-click to check out ${full} as a local branch`,
+    checkingOut: (full: string) => `Checking out ${full}…`,
     renameBranch: "Rename remote branch",
     deleteBranch: "Delete remote branch",
     upstreamOfHead: "This is the upstream of the checked-out branch. Switch branches first.",

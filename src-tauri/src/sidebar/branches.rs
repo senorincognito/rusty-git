@@ -168,6 +168,45 @@ pub async fn checkout_local_branch(path: String, name: String) -> Result<(), Str
         .map_err(|e| e.to_string())?
 }
 
+/// Checks out the remote branch `remote/name` as a local branch of the same name that tracks it, like
+/// `git switch name` does. An existing local branch of that name is used when it already tracks the remote
+/// branch. If the checkout fails (local changes in the way) nothing is left behind.
+fn checkout_remote(repo: &Repository, remote: &str, name: &str) -> Result<(), String> {
+    let full = format!("{remote}/{name}");
+    let remote_branch =
+        repo.find_branch(&full, BranchType::Remote).map_err(|_| format!("Remote branch \"{full}\" not found"))?;
+    if let Ok(local) = repo.find_branch(name, BranchType::Local) {
+        let tracks = local.upstream().ok().and_then(|u| u.name().ok().flatten().map(str::to_string));
+        if tracks.as_deref() != Some(full.as_str()) {
+            return Err(format!("A local branch named \"{name}\" already exists and does not track \"{full}\""));
+        }
+        return checkout_branch(repo, name);
+    }
+    let tip = remote_branch.get().peel_to_commit().map_err(err)?;
+    let mut local = match repo.branch(name, &tip, false) {
+        Ok(b) => b,
+        // e.g. "feature" when "feature/x" exists locally (or the reverse).
+        Err(e) if e.code() == git2::ErrorCode::Directory => {
+            return Err(format!("\"{name}\" conflicts with an existing local branch name"));
+        }
+        Err(e) => return Err(err(e)),
+    };
+    let result = local.set_upstream(Some(&full)).map_err(err).and_then(|_| checkout_branch(repo, name));
+    if result.is_err() {
+        let _ = local.delete();
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn checkout_remote_branch(path: String, remote: String, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        checkout_remote(&Repository::discover(&path).map_err(err)?, &remote, &name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Commits on `name` that are neither in the current HEAD nor on its upstream, i.e. work
 /// that would become unreachable by deleting the branch (same rule as `git branch -d`).
 fn unmerged_commits(repo: &Repository, name: &str) -> Result<usize, String> {
@@ -404,6 +443,38 @@ mod tests {
         assert_eq!(renamed.get().target(), Some(c1));
         assert_eq!(renamed.upstream().unwrap().name(), Ok(Some("origin/other")));
         assert_eq!(repo.head().unwrap().shorthand(), Ok("main"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn checks_out_a_remote_branch_as_a_tracking_branch() {
+        let dir = std::env::temp_dir().join(format!("gc-remote-checkout-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let repo = Repository::init(&dir).unwrap();
+        let sig = Signature::now("t", "t@example.com").unwrap();
+        let tree = repo.find_tree(repo.treebuilder(None).unwrap().write().unwrap()).unwrap();
+        let c = repo.commit(Some("refs/heads/main"), &sig, &sig, "c", &tree, &[]).unwrap();
+        repo.set_head("refs/heads/main").unwrap();
+        // A remote-tracking ref without a server is enough: no network is involved.
+        repo.remote("origin", "https://example.invalid/r.git").unwrap();
+        repo.reference("refs/remotes/origin/feature/x", c, true, "test").unwrap();
+
+        assert!(checkout_remote(&repo, "origin", "nope").unwrap_err().contains("not found"));
+        checkout_remote(&repo, "origin", "feature/x").unwrap();
+        let list = local_branches(&repo).unwrap();
+        let x = list.iter().find(|b| b.name == "feature/x").unwrap();
+        assert!(x.is_head);
+        assert_eq!(x.upstream.as_deref(), Some("origin/feature/x"));
+
+        // Again: the tracking branch already exists and is simply checked out.
+        checkout_branch(&repo, "main").unwrap();
+        checkout_remote(&repo, "origin", "feature/x").unwrap();
+        assert!(local_branches(&repo).unwrap().iter().find(|b| b.name == "feature/x").unwrap().is_head);
+
+        // A same-named local branch that tracks nothing is not silently taken over.
+        repo.reference("refs/remotes/origin/main", c, true, "test").unwrap();
+        assert!(checkout_remote(&repo, "origin", "main").unwrap_err().contains("does not track"));
 
         let _ = std::fs::remove_dir_all(&dir);
     }

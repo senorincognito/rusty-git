@@ -192,7 +192,7 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   this repository's settings (its remote-tracking branches go, local branches that tracked it lose their upstream; nothing on the server is touched). A yellow ⚠ beside a remote's name means the last fetch
   failed (hover it for git's message); it disappears after the next successful fetch, pull or background fetch.
 - **Context menus** on branches: *Rename branch* and *Delete branch* (both disabled for the
-  checked-out branch), and *Rename remote branch* and *Delete remote branch* (both disabled for
+  checked-out branch), and on remote branches *Check out* (also a double-click on the branch: creates a local branch of the same name that tracks it, or switches to it if it already does; refuses when a same-named local branch tracks something else, and keeps your local changes safe like any checkout), *Rename remote branch* and *Delete remote branch* (both disabled for
   the branch the checked-out branch tracks). Renaming edits the name inline (Enter confirms,
   Esc cancels). A remote rename asks first, pushes the new name and deletes the old one in one
   atomic push (refused if somebody pushed to it since your last fetch), and points local
@@ -243,7 +243,7 @@ Esc leaves text fields and the terminal alone, so it never interferes with typin
 
 ## Not yet implemented
 
-- Tags in the sidebar and checkout of remote branches
+- Tags in the sidebar
 - Applying a stash without removing it
 - Merge and rebase as standalone actions, revert commit
 - Line-level (single line) staging and unstaging

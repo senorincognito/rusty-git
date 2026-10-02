@@ -16,6 +16,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             sidebar::branches::checkout_local_branch,
+            sidebar::branches::checkout_remote_branch,
             sidebar::branches::count_unmerged_commits,
             sidebar::branches::create_branch,
             sidebar::branches::delete_local_branch,

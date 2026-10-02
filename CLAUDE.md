@@ -210,6 +210,9 @@ app rename so users keep their data. Don't change it casually.
   Removing a remote (`remote_delete`) drops its remote-tracking refs and the upstream of branches that tracked it, never
   touches the server, and confirms first. Names are checked with `Remote::is_valid_name`. The fetch-failure ⚠ shows on every
   remote because the fetch covers all of them.
+- **Remote branch checkout** (`checkout_remote_branch`, double-click or first item of its menu): creates local `<name>` at the remote tip with
+  upstream `<remote>/<name>` and checks it out safely (the new branch is removed again if the checkout fails); an existing local
+  branch is reused only if it already tracks that remote branch, otherwise it errors rather than taking it over.
 - **Branch rename** (inline editor in the sidebar) is not allowed for the checked-out branch (local) or the
   branch the checked-out branch tracks (remote). Remote rename = one atomic push of the new name plus
   deletion of the old one, guarded by a lease; local branches that tracked it are repointed.
@@ -410,7 +413,7 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
 
 ## Not implemented yet
 
-Tags in the sidebar; applying a stash without removing it; line-level (single line) staging and unstaging; checkout of remote branches; merge/rebase as standalone actions; discard
+Tags in the sidebar; applying a stash without removing it; line-level (single line) staging and unstaging; merge/rebase as standalone actions; discard
 changes and stash; conflict resolution UI (pulls with conflicts are aborted); syntax highlighting and intra-line diff highlighting; side-by-side diff; a
 "you rewrote pushed history, force push instead" hint in the diverged-pull dialog; a conflict preview
 (`git merge-tree`) before pulling.

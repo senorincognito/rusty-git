@@ -19,6 +19,10 @@ export const createBranch = (path: string, name: string) =>
 export const checkoutLocalBranch = (path: string, name: string) =>
   invoke<void>("checkout_local_branch", { path, name });
 
+/** Checks out a remote branch as a local branch of the same name that tracks it (created if needed). */
+export const checkoutRemoteBranch = (path: string, remote: string, name: string) =>
+  invoke<void>("checkout_remote_branch", { path, remote, name });
+
 /** Number of commits that would be left unreachable by deleting the branch (0 if merged). */
 export const countUnmergedCommits = (path: string, name: string) =>
   invoke<number>("count_unmerged_commits", { path, name });

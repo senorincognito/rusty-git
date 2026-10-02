@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { checkoutRemoteBranch } from "@/api/branches";
 import { confirmDialog } from "@/api/dialog";
 import {
   countUnmergedRemoteCommits,
@@ -154,6 +155,20 @@ export default function Remotes({
     }
   };
 
+  const checkOut = async (remote: string, branch: string) => {
+    if (busy !== null) return;
+    setBusy(t.remotes.checkingOut(`${remote}/${branch}`));
+    try {
+      await checkoutRemoteBranch(path, remote, branch);
+      setError(null);
+      onChanged();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   // With a filter, a remote shows only the branches that match (all of them when its own name matches);
   // remotes with nothing to show are hidden.
   const visible = remotes
@@ -238,7 +253,8 @@ export default function Remotes({
                 key={b}
                 style={leafIndent(row.depth)}
                 className={menu?.remote === r.name && menu.branch === b ? "ctx" : ""}
-                title={`${r.name}/${b}`}
+                title={t.remotes.checkoutHint(`${r.name}/${b}`)}
+                onDoubleClick={() => editing === null && checkOut(r.name, b)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setMenu({ x: e.clientX, y: e.clientY, remote: r.name, branch: b });
@@ -332,7 +348,13 @@ export default function Remotes({
           onClose={closeMenu}
           items={[
             {
+              label: t.remotes.checkout,
+              disabled: busy !== null,
+              onClick: () => checkOut(menu.remote, menu.branch),
+            },
+            {
               label: t.remotes.renameBranch,
+              separatorBefore: true,
               disabled: busy !== null || branchRemote.trackedByHead === menu.branch,
               title:
                 branchRemote.trackedByHead === menu.branch
