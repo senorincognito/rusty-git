@@ -393,6 +393,9 @@ Release), and a Windows code-signing certificate to avoid the SmartScreen "unkno
   such commands with `|| true`. Installers are listed only if newer than the run's start, so stale ones from an
   earlier build aren't reported as results. Keep the `.ps1` ASCII-only (Windows PowerShell 5.1 misreads
   BOM-less UTF-8).
+- **Release notes** live in `docs/releases/v<version>.md` (the name matches the tag `release/<version>` creates), one file per
+  release, written for the people who download it: requirements, downloads, what is in it, known limitations. Write the next
+  one when the version is bumped; copy the structure of the previous file and list only what changed.
 - macOS builds can only be made on a Mac.
 - **The app shells out to the system `git`**, so users need Git installed and on PATH; the installers cannot
   bundle it. The app reports "git executable not found" when it is missing.
