@@ -5,11 +5,13 @@
 .sidebox {
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto;
-  min-height: 0;
+  // A collapsed box is only its headline and must never shrink: squeezed below that height the headline overflows
+  // into the next box and the headlines look stuck together.
+  flex: none;
 
-  // Never squeezed below the headline plus a few rows.
+  // Open boxes share what is left, but are never squeezed below the headline plus a few rows.
   &.open {
+    flex: 0 1 auto;
     min-height: 96px;
   }
 }
