@@ -104,6 +104,7 @@ export default function LocalBranches({
   return (
     <Section
       title={t.localBranches.title}
+      resizeKey="local"
       count={shown?.length}
       action={{
         label: t.localBranches.actions,

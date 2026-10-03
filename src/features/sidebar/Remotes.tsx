@@ -185,6 +185,7 @@ export default function Remotes({
   return (
     <Section
       title={t.remotes.title}
+      resizeKey="remotes"
       count={visible?.length}
       action={{
         label: t.remotes.actions,

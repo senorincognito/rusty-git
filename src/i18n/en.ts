@@ -40,6 +40,11 @@ export const en = {
     copied: "Copied",
   },
 
+  splitter: {
+    label: "Resize section",
+    hint: "Drag to resize, double-click to reset",
+  },
+
   resizePanel: {
     label: "Resize panel",
     hint: "Drag to resize, double-click to reset",

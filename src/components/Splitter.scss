@@ -1,0 +1,48 @@
+@use "@/styles/core" as *;
+
+// The draggable bar between two stacked sections. It sits on the border line and has a wider hit area
+// than it shows.
+.splitter {
+  position: relative;
+  flex: none;
+  height: 0;
+  z-index: 5;
+  cursor: row-resize;
+  touch-action: none;
+
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -3px;
+    height: 7px;
+  }
+
+  // The line that lights up on hover, keyboard focus and while dragging.
+  &::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -1px;
+    height: 2px;
+    background: transparent;
+    transition: background 0.12s;
+  }
+
+  &:hover::after,
+  &:focus-visible::after,
+  body.resizing-v &::after {
+    background: $accent;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+body.resizing-v {
+  user-select: none;
+  cursor: row-resize;
+}

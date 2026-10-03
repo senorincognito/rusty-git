@@ -92,7 +92,7 @@ export default function Stashes({
   };
 
   return (
-    <Section title={t.stashes.title} count={shown?.length}>
+    <Section title={t.stashes.title} resizeKey="stashes" count={shown?.length}>
       {error && <p className="error side-msg">{error}</p>}
       {stashes?.length === 0 && <p className="muted side-msg">{t.stashes.none}</p>}
       {stashes && stashes.length > 0 && shown?.length === 0 && <p className="muted side-msg">{t.stashes.noMatch}</p>}

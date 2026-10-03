@@ -14,9 +14,11 @@ import { confirmDialog } from "@/api/dialog";
 import { stashPaths } from "@/api/stash";
 import ContextMenu, { type MenuItem } from "@/components/ContextMenu";
 import FileBadge from "@/components/FileBadge";
+import Splitter from "@/components/Splitter";
 import { followSelection } from "@/hooks/followSelection";
 import { useArrowKeys } from "@/hooks/useArrowKeys";
 import { useLatestRequest } from "@/hooks/useLatestRequest";
+import { usePersistentState } from "@/hooks/usePersistentState";
 import { t } from "@/i18n";
 import StashDialog from "./StashDialog";
 import "./Changes.scss";
@@ -34,10 +36,13 @@ function FileList(props: {
   onContextMenu: (file: { path: string; kind: ChangeKind }, x: number, y: number) => void;
   /** The file whose context menu is open, if it is in this list. */
   menuPath: string | null;
+  /** The share of the panel's list height this list gets. */
+  grow: number;
 }) {
-  const { title, files, actionLabel, onAction, onActionAll, selectedPath, onSelect, onContextMenu, menuPath } = props;
+  const { title, files, actionLabel, onAction, onActionAll, selectedPath, onSelect, onContextMenu, menuPath, grow } =
+    props;
   return (
-    <section className="filelist">
+    <section className="filelist" style={{ flexGrow: grow }}>
       <header>
         <span>
           {title} <span className="count">{files.length}</span>
@@ -188,6 +193,23 @@ export default function Changes({
     return true;
   });
   const root = useRef<HTMLElement>(null);
+  // How the height of the two lists is shared: the unstaged list gets this fraction.
+  const [split, setSplit] = usePersistentState<number>(
+    "changesSplit",
+    0.5,
+    (v): v is number => typeof v === "number" && v > 0 && v < 1,
+  );
+  const dragSplit = useRef({ from: 0, total: 1 });
+  const beginSplit = () => {
+    const lists = root.current?.querySelectorAll<HTMLElement>(".filelist");
+    if (!lists || lists.length < 2) return;
+    dragSplit.current = { from: lists[0].offsetHeight, total: lists[0].offsetHeight + lists[1].offsetHeight || 1 };
+  };
+  const splitTo = (px: number) => {
+    const { total } = dragSplit.current;
+    const margin = Math.min(0.4, 56 / total); // a list keeps at least its header and a row or two
+    setSplit(Math.min(Math.max(px / total, margin), 1 - margin));
+  };
   useEffect(() => {
     followSelection(root.current, ".filelist li.selected");
   }, [selected]);
@@ -270,6 +292,7 @@ export default function Changes({
     <aside className="changes" ref={root} style={hidden ? { display: "none" } : undefined}>
       <FileList
         title={t.changes.unstaged}
+        grow={split}
         files={unstaged}
         selectedPath={selected && !selected.staged ? selected.path : null}
         onSelect={(f) => onSelectFile({ path: f.path, staged: false, status: f.kind })}
@@ -286,8 +309,16 @@ export default function Changes({
           )
         }
       />
+      <Splitter
+        onStart={beginSplit}
+        onMove={(dy) => splitTo(dragSplit.current.from + dy)}
+        onNudge={(dy) => splitTo(dragSplit.current.from + dy)}
+        onEnd={() => {}}
+        onReset={() => setSplit(0.5)}
+      />
       <FileList
         title={t.changes.staged}
+        grow={1 - split}
         files={staged}
         selectedPath={selected?.staged ? selected.path : null}
         onSelect={(f) => onSelectFile({ path: f.path, staged: true, status: f.kind })}

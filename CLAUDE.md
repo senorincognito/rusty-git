@@ -93,7 +93,7 @@ styles/                    global SCSS: tokens, mixins, base, buttons, switch, f
 ### Persisted state
 
 `recent_repos.json` in the app data dir; `localStorage` keys `sidebarWidth`, `changesWidth`,
-`autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.fullFile` (default true).
+`autoFetch.enabled` (default true), `autoFetch.seconds` (default 180), `diff.fullFile` (default true), `sectionHeight.<local|remotes|stashes>` (px), `changesSplit` (fraction).
 All of it is keyed by the bundle identifier `com.gitclient.app`, which is **deliberately unchanged** by the
 app rename so users keep their data. Don't change it casually.
 
@@ -111,6 +111,10 @@ app rename so users keep their data. Don't change it casually.
   the same `NewBranchForm` the toolbar's Branch button uses, inline) and Remotes. Keep branch creation in that one form.
 - **Sidebar layout**: `.sidebar` does not scroll itself; each open `Section` is a shrinkable flex item (min height 96px) whose
   `.sidebox-body` scrolls, so all headlines stay visible. Keep new sidebar sections inside `Section`.
+- **Vertical resizing**: `components/Splitter` is the bar (pointer capture, arrows, double-click reset; owner measures in `onStart` and applies
+  the offset in `onMove`). `Section` takes `resizeKey`: a user height is `flex: 0 1 <px>` (persisted as `sectionHeight.<key>`, clamped so the
+  other boxes keep their minimum or headline; the last box has no bar). `Changes` splits the Unstaged/Staged lists with a persisted
+  fraction (`changesSplit`) via `flex-grow`. The commit detail panel is not split.
 - **Branch folders**: `sidebar/branchTree.tsx` (`buildRows`, `useClosedFolders`, `FolderRow`) turns names into folder/branch rows
   (folders first, nested by `/`, closed state not persisted, all open while a filter is active); local and remote lists both use it.
 - **Sidebar filter**: `Sidebar` owns one text field (not persisted) and passes `filter` to `LocalBranches`, `Remotes` and `Stashes`,

@@ -175,6 +175,9 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
 - **Branch** button: create a branch from the current commit and check it out; the name is
   validated and uncommitted changes carry over.
   The **⋯** button in the Local branches headline has *New branch…*, which opens the same name form inline.
+- **Resizable sections**: drag the bottom edge of a left-panel section (Local branches, Remotes) to set its height, and the bar
+  between the Unstaged and Staged lists in the right panel to share their heights. Arrow up/down on a focused bar nudge it (Shift =
+  bigger steps), double-click resets. The sizes are remembered. A section can never be dragged so far that another one loses its headline.
 - **Long lists**: the three sections share the panel's height, and a long list scrolls inside its own section, so the Local
   branches, Remotes and Stashes headlines stay visible whatever the number of branches (collapse a section to give the
   others the room).

@@ -16,6 +16,11 @@
   }
 }
 
+// The last box has nothing below it to trade height with.
+.sidebox:last-child > .splitter {
+  display: none;
+}
+
 .sidebox-body {
   flex: 1 1 auto;
   min-height: 0;
