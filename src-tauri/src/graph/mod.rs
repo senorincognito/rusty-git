@@ -1,3 +1,5 @@
+pub mod fast_forward;
+pub mod merge;
 pub mod reset;
 
 use std::collections::{HashMap, HashSet};

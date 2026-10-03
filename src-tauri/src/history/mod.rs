@@ -6,7 +6,7 @@ pub mod drop;
 pub mod rebase;
 pub mod rename;
 #[cfg(test)]
-mod test_support;
+pub(crate) mod test_support;
 
 fn err(e: git2::Error) -> String {
     e.message().to_string()

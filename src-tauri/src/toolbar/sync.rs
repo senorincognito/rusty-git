@@ -281,7 +281,7 @@ fn pull_with(path: &str, mode: &str) -> Result<String, String> {
 
 /// After a failed pull: if git stopped halfway (merge or rebase with conflicts), cancel it and say
 /// which files conflicted. Otherwise return git's own message unchanged.
-fn cancel_unfinished(path: &str, retry_hint: &str, original: String) -> String {
+pub(crate) fn cancel_unfinished(path: &str, retry_hint: &str, original: String) -> String {
     let Ok(repo) = open(path) else { return original };
     let (abort, what): (&[&str], &str) = match repo.state() {
         RepositoryState::Merge => (&["merge", "--abort"], "merge"),

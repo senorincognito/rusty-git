@@ -73,6 +73,7 @@ export default function Graph({
   onInteractiveRebase,
   onDropCommit,
   onResetCommit,
+  onFastForward,
 }: {
   path: string;
   refreshKey?: number;
@@ -90,6 +91,7 @@ export default function Graph({
   onDropCommit: (commit: { id: string; shortId: string }) => void;
   /** Reset the branch to a commit (soft, mixed or hard). */
   onResetCommit: (commit: { id: string; shortId: string }, mode: ResetMode) => void;
+  onFastForward: (commit: { id: string; shortId: string }) => void;
 }) {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [limit, setLimit] = useState(PAGE);
@@ -266,10 +268,20 @@ export default function Graph({
               title: dropReason ?? t.graph.dropHint,
               onClick: () => onDropCommit({ id: menu.row.id, shortId: menu.row.shortId }),
             },
+            {
+              label: t.graph.fastForward,
+              separatorBefore: true,
+              disabled: menu.row.isStash || menu.row.onHead,
+              title: menu.row.isStash
+                ? t.graph.fastForwardStash
+                : menu.row.onHead
+                  ? t.graph.fastForwardContained
+                  : t.graph.fastForwardHint,
+              onClick: () => onFastForward({ id: menu.row.id, shortId: menu.row.shortId }),
+            },
             // One group; the three reset modes open to its right.
             {
               label: t.graph.reset,
-              separatorBefore: true,
               disabled: menu.row.isStash,
               title: menu.row.isStash
                 ? t.graph.resetStash

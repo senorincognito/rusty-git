@@ -154,6 +154,19 @@ What Rusty Git Client can do today. For setting it up and building it, see the [
   history (a force push is then needed) and notes that other branches and tags keep the old history. The old
   commits stay recoverable through `git reflog` for a while.
 
+## Merging a branch
+- Right-click a **local branch** (*Merge <branch> into <current>*) or a **remote branch** (*Merge <remote>/<branch> into the current branch*) to merge it into
+  the checked-out branch. A dialog asks first. A merge commit is created with Git's default message, or the branch simply fast-forwards when it can; uncommitted
+  changes are set aside and restored. If the branch is already contained you are told so. Conflicts are not resolved in the app yet: the merge is
+  cancelled, the conflicting files are named and nothing changes. Not available on a detached HEAD.
+
+## Fast-forward
+- Right-click a **local branch** and choose **Fast-forward <current> to <branch>**, or right-click a **commit** in the graph and choose
+  **Fast-forward to this commit**: the checked-out branch moves forward to it, like `git merge --ff-only`, and your files are updated.
+  It only works when the target is ahead of the checked-out branch. If it already contains the commit, the histories have diverged
+  (the message says by how much) or uncommitted changes are in the way, an error explains why and nothing changes. No confirmation:
+  nothing is lost.
+
 ## Resetting to a commit
 - Right-click any commit, point at **Reset to this commit** (a menu group: its submenu opens to the right on
   hover, click or the right arrow key) and choose **Soft**, **Mixed** or **Hard** (the commits of other lines of

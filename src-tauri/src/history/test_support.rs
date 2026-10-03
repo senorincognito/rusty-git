@@ -2,7 +2,7 @@
 
 use git2::{Oid, Repository, Signature};
 
-pub(super) fn make(repo: &Repository, who: &str, msg: &str, parents: &[Oid], refname: Option<&str>) -> Oid {
+pub(crate) fn make(repo: &Repository, who: &str, msg: &str, parents: &[Oid], refname: Option<&str>) -> Oid {
     let sig = Signature::now(who, "t@example.com").unwrap();
     let tree = repo.find_tree(repo.treebuilder(None).unwrap().write().unwrap()).unwrap();
     let ps: Vec<_> = parents.iter().map(|o| repo.find_commit(*o).unwrap()).collect();
@@ -10,12 +10,12 @@ pub(super) fn make(repo: &Repository, who: &str, msg: &str, parents: &[Oid], ref
     repo.commit(refname, &sig, &sig, msg, &tree, &refs).unwrap()
 }
 
-pub(super) fn msg(repo: &Repository, oid: Oid) -> String {
+pub(crate) fn msg(repo: &Repository, oid: Oid) -> String {
     repo.find_commit(oid).unwrap().message().unwrap().trim().to_string()
 }
 
 /// Commits `content` as file `name` on HEAD (real files, so the working directory matters).
-pub(super) fn commit_file(repo: &Repository, dir: &std::path::Path, name: &str, content: &str, msg: &str) -> Oid {
+pub(crate) fn commit_file(repo: &Repository, dir: &std::path::Path, name: &str, content: &str, msg: &str) -> Oid {
     std::fs::write(dir.join(name), content).unwrap();
     let mut index = repo.index().unwrap();
     index.add_path(std::path::Path::new(name)).unwrap();
@@ -28,7 +28,7 @@ pub(super) fn commit_file(repo: &Repository, dir: &std::path::Path, name: &str, 
 }
 
 /// Commits an empty-tree merge of \`first\` and \`second\` on HEAD.
-pub(super) fn merge_commit(repo: &Repository, first: Oid, second: Oid) -> Oid {
+pub(crate) fn merge_commit(repo: &Repository, first: Oid, second: Oid) -> Oid {
     let sig = Signature::now("D", "d@example.com").unwrap();
     let tree = repo.find_commit(first).unwrap().tree().unwrap();
     repo.commit(
@@ -42,14 +42,14 @@ pub(super) fn merge_commit(repo: &Repository, first: Oid, second: Oid) -> Oid {
     .unwrap()
 }
 
-pub(super) fn new_repo(name: &str) -> (std::path::PathBuf, Repository) {
+pub(crate) fn new_repo(name: &str) -> (std::path::PathBuf, Repository) {
     let dir = std::env::temp_dir().join(format!("gc-drop-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let repo = Repository::init(&dir).unwrap();
     (dir, repo)
 }
 
-pub(super) fn log(repo: &Repository) -> Vec<String> {
+pub(crate) fn log(repo: &Repository) -> Vec<String> {
     let mut walk = repo.revwalk().unwrap();
     walk.push_head().unwrap();
     walk.map(|o| repo.find_commit(o.unwrap()).unwrap().summary().unwrap().unwrap().to_string()).collect()

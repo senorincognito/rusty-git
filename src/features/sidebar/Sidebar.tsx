@@ -15,6 +15,8 @@ export default function Sidebar({
   onSelectCommit,
   onStashPopped,
   onStashDropped,
+  onFastForward,
+  onMerge,
 }: {
   path: string;
   refreshKey: number;
@@ -28,6 +30,10 @@ export default function Sidebar({
   onStashPopped: (id: string) => void;
   /** A stash was deleted from the list (by its commit id). */
   onStashDropped: (id: string) => void;
+  /** Fast-forward the checked-out branch to this commit id or full ref name. */
+  onFastForward: (target: string) => void;
+  /** Merge the branch (full ref name, display name) into the checked-out branch. */
+  onMerge: (target: string, source: string) => void;
 }) {
   // One filter for every list below: local branches, remote branches and stashes.
   const [filter, setFilter] = useState("");
@@ -56,8 +62,8 @@ export default function Sidebar({
             </button>
           )}
         </div>
-        <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} filter={filter} />
-        <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} fetchError={fetchError} filter={filter} />
+        <LocalBranches path={path} refreshKey={refreshKey} onChanged={onChanged} filter={filter} onFastForward={onFastForward} onMerge={onMerge} />
+        <Remotes path={path} refreshKey={refreshKey} onChanged={onChanged} fetchError={fetchError} filter={filter} onMerge={onMerge} />
         <Stashes
           path={path}
           refreshKey={refreshKey}

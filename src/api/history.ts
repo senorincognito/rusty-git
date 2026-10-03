@@ -117,3 +117,11 @@ export const getResetInfo = (path: string, id: string) => invoke<ResetInfo>("get
  */
 export const resetToCommit = (path: string, id: string, mode: ResetMode) =>
   invoke<void>("reset_to_commit", { path, id, mode });
+
+/** Moves the checked-out branch forward to a commit id or full ref name; resolves to the number of commits gained. */
+export const fastForward = (path: string, target: string) => invoke<number>("fast_forward_cmd", { path, target });
+
+export type MergeOutcome = "upToDate" | "fastForward" | "merged";
+
+/** Merges a branch (full ref name) into the checked-out one. Conflicts cancel the merge and reject with the files named. */
+export const mergeBranch = (path: string, target: string) => invoke<MergeOutcome>("merge_branch_cmd", { path, target });

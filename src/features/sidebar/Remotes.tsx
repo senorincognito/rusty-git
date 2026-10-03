@@ -26,6 +26,7 @@ export default function Remotes({
   onChanged,
   fetchError,
   filter,
+  onMerge,
 }: {
   path: string;
   refreshKey: number;
@@ -34,6 +35,8 @@ export default function Remotes({
   fetchError: string | null;
   /** Only branches whose name (or "remote/name") matches are listed; a remote whose own name matches shows all of its branches. */
   filter: string;
+  /** Merge this remote branch (full ref name, display name) into the checked-out branch. */
+  onMerge: (target: string, source: string) => void;
 }) {
   const [remotes, setRemotes] = useState<RemoteInfo[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -352,6 +355,11 @@ export default function Remotes({
               label: t.remotes.checkout,
               disabled: busy !== null,
               onClick: () => checkOut(menu.remote, menu.branch),
+            },
+            {
+              label: t.remotes.merge(`${menu.remote}/${menu.branch}`),
+              title: t.remotes.mergeHint,
+              onClick: () => onMerge(`refs/remotes/${menu.remote}/${menu.branch}`, `${menu.remote}/${menu.branch}`),
             },
             {
               label: t.remotes.renameBranch,

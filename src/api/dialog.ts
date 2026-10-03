@@ -18,3 +18,6 @@ export const confirmDialog = (message: string, title: string, danger = false, ok
 
 /** Native error message box. */
 export const showError = (text: string, title: string) => message(text, { title, kind: "error" });
+
+/** Native information message box. */
+export const showInfo = (text: string, title: string) => message(text, { title, kind: "info" });

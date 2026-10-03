@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { ChangeKind } from "@/api/changes";
 import type { CommitFile } from "@/api/commit";
-import { confirmDialog, showError } from "@/api/dialog";
-import { dropLatestCommit, getDropInfo, getResetInfo, resetToCommit, type ResetMode } from "@/api/history";
+import { confirmDialog, showError, showInfo } from "@/api/dialog";
+import { dropLatestCommit, fastForward, getDropInfo, getResetInfo, mergeBranch, resetToCommit, type ResetMode } from "@/api/history";
 import { openRepo, type RepoInfo } from "@/api/repo";
 import { unwatchRepo, watchRepo } from "@/api/watch";
 import ResizablePanel from "@/components/ResizablePanel";
@@ -92,6 +92,30 @@ export default function RepoView({
     }
   };
 
+  // Right-click > Fast-forward (on a commit or a local branch): move the checked-out branch forward to the target.
+  const fastForwardTo = async (target: string) => {
+    try {
+      await fastForward(path, target);
+      setOpenWorkingFile(null); // the files may have changed under an open working-tree diff
+      reload();
+    } catch (e) {
+      await showError(String(e), t.repo.fastForwardTitle);
+    }
+  };
+
+  // Right-click > Merge on a branch: merge it into the checked-out branch after a confirmation.
+  const mergeInto = async (target: string, source: string) => {
+    try {
+      if (!(await confirmDialog(t.repo.mergeConfirm(source), t.repo.mergeTitle, false, t.repo.mergeOk))) return;
+      const outcome = await mergeBranch(path, target);
+      setOpenWorkingFile(null); // the files may have changed under an open working-tree diff
+      reload();
+      if (outcome === "upToDate") await showInfo(t.repo.mergeUpToDate(source), t.repo.mergeTitle);
+    } catch (e) {
+      await showError(String(e), t.repo.mergeTitle);
+    }
+  };
+
   const closeCommit = () => {
     setSelectedCommit(null);
     setOpenFile(null);
@@ -161,6 +185,8 @@ export default function RepoView({
                 if (selectedCommit?.id === id) closeCommit(); // its detail view has nothing left to show
                 reload();
               }}
+              onFastForward={fastForwardTo}
+              onMerge={mergeInto}
               onStashDropped={(id) => {
                 if (selectedCommit?.id === id) closeCommit();
                 reload();
@@ -187,6 +213,7 @@ export default function RepoView({
                   onInteractiveRebase={startRebase}
                   onDropCommit={dropCommit}
                   onResetCommit={resetCommit}
+                  onFastForward={(c) => fastForwardTo(c.id)}
                 />
               </div>
               {openFile && selectedCommit && !rebasing && (

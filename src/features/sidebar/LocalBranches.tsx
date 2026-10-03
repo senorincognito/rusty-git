@@ -22,12 +22,18 @@ export default function LocalBranches({
   refreshKey,
   onChanged,
   filter,
+  onFastForward,
+  onMerge,
 }: {
   path: string;
   refreshKey: number;
   onChanged: () => void;
   /** Only branches whose name matches are listed. */
   filter: string;
+  /** Fast-forward the checked-out branch to this ref name. */
+  onFastForward: (target: string) => void;
+  /** Merge this branch (full ref name, display name) into the checked-out branch. */
+  onMerge: (target: string, source: string) => void;
 }) {
   const [branches, setBranches] = useState<BranchInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +67,7 @@ export default function LocalBranches({
   };
 
   const shown = branches?.filter((b) => matchesFilter(filter, b.name));
+  const currentBranch = branches?.find((b) => b.isHead)?.name;
   const folders = useClosedFolders();
   const rows = shown && buildRows(shown, (b) => b.name, folders.closed, filter.trim() !== "");
   const [menu, setMenu] = useState<{ x: number; y: number; branch: BranchInfo } | null>(null);
@@ -182,7 +189,28 @@ export default function LocalBranches({
           onClose={closeMenu}
           items={[
             {
+              label: t.localBranches.fastForward(currentBranch ?? "…", menu.branch.name),
+              disabled: menu.branch.isHead || currentBranch === undefined,
+              title: menu.branch.isHead
+                ? t.localBranches.fastForwardCurrent
+                : currentBranch === undefined
+                  ? t.localBranches.fastForwardDetached
+                  : t.localBranches.fastForwardHint,
+              onClick: () => onFastForward(`refs/heads/${menu.branch.name}`),
+            },
+            {
+              label: t.localBranches.merge(menu.branch.name, currentBranch ?? "…"),
+              disabled: menu.branch.isHead || currentBranch === undefined,
+              title: menu.branch.isHead
+                ? t.localBranches.mergeCurrent
+                : currentBranch === undefined
+                  ? t.localBranches.mergeDetached
+                  : t.localBranches.mergeHint,
+              onClick: () => onMerge(`refs/heads/${menu.branch.name}`, menu.branch.name),
+            },
+            {
               label: t.localBranches.rename,
+              separatorBefore: true,
               disabled: menu.branch.isHead,
               title: menu.branch.isHead
                 ? t.localBranches.renameCurrent

@@ -47,6 +47,8 @@ the module path to be visible from the crate root.
 | `repo/mod.rs` | `features/welcome`, `features/repo` | `open_repo`, recent repos (JSON in the app data dir) |
 | `repo/watch.rs` | `features/repo` | the `.git` watcher (`watch_repo`, `unwatch_repo`) |
 | `graph/mod.rs` | `features/graph` | `get_graph`: revwalk over all refs, lane layout computed in Rust, `on_head` flag per row |
+| `graph/fast_forward.rs` | graph + branch context menus | `fast_forward_cmd`: move the checked-out branch forward to a commit id or full ref name |
+| `graph/merge.rs` | branch context menus | `merge_branch_cmd`: merge a branch (full ref name) into the checked-out one via system git; returns `upToDate`/`fastForward`/`merged` |
 | `graph/reset.rs` | graph context menu | `get_reset_info` (what a reset would remove/add, pushed count, uncommitted files), `reset_to_commit` (soft/mixed/hard) |
 | `history/mod.rs` | graph context menu | shared by the rewrites below: `is_pushed`, `rewrite_plan`, `rebuild_with_messages`, `move_head_to`, `blocking` |
 | `history/rename.rs` | `features/rename` | `get_rename_info`, `rename_commit_message` (rewrites the commit and its descendants) |
@@ -208,6 +210,11 @@ app rename so users keep their data. Don't change it casually.
   pushed counts, merge flag) warns about rewritten ids, pushed history (force push), merge commits, other refs
   keeping the old history and lost signatures. Errors use the native `showError` dialog. **Revert commit** (the
   non-rewriting alternative for pushed commits) is not built.
+- **Merge** (`graph/merge.rs`; *Merge <branch> into <current>* in a local branch's menu, *Merge <remote>/<branch> into the current branch* in a remote branch's, via `RepoView.mergeInto`): merges into the checked-out branch only, after a confirmation. Runs `git merge --no-edit --autostash <full ref>` (system git, so the user's identity/config apply; the ref must start with `refs/`, which also keeps it from being read as an option). Same conflict policy as Pull: no conflict UI, so a conflicted merge is aborted with `cancel_unfinished` (files named, nothing changed). Fast-forwardable branches fast-forward (no merge commit); an already contained branch is reported with an info box. Refused on a detached HEAD or while another operation is in progress.
+- **Fast-forward** (`graph/fast_forward.rs`; *Fast-forward to this commit* in the graph menu, *Fast-forward <current> to <branch>* in a local branch's menu, both through `RepoView.fastForwardTo`): `git merge --ff-only` semantics on the checked-out branch only. The target must be a strict
+  descendant of HEAD (otherwise errors: already contained, or diverged with both counts), HEAD must be a branch, the repo state clean. The files are
+  checked out safely first (uncommitted changes in the way abort it, nothing moves), then the branch ref moves. No confirmation (nothing is lost);
+  errors use `showError`. The UI only pre-disables the obvious cases (stash, already on the branch's line, the branch itself); the rest is the backend's message.
 - **Reset** (graph context menu, `graph/reset.rs`): a *Reset to this commit* group whose submenu offers Soft / Mixed / Hard on any non-stash commit,
   each behind a confirmation whose text is built by `features/repo/describeReset.ts` from `get_reset_info` (commits
   removed with the newest few listed, commits gained, pushed count, uncommitted file count, ancestor or jump to another
